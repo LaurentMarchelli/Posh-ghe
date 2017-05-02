@@ -15,7 +15,7 @@ class GheCommand
 
 	# Virtual callback method used to parse the result
 	SetResponse([System.Object]$Response)
-		{ $this.Response = $Response	}
+		{ $this.Response = $Response }
 }
 
 class GheCommandCollection : System.Collections.ArrayList 
@@ -67,7 +67,7 @@ class GheClient
 	[System.Management.Automation.PSCredential]$SshCredentials
 
 	# Extented Parameters
-	[Hashtable]$ExtParameters
+	[Hashtable]$Params
 
 	GheClient(
 		[String]$ServerUri,
@@ -96,7 +96,7 @@ class GheClient
 		)
 
 		# Extented Parameters
-		$this.ExtParameters = [Hashtable]::new()
+		$this.Params = [Hashtable]::new()
 	}
 
 	#####################################################
@@ -118,11 +118,11 @@ class GheClient
 
 	[String] CreateImpersonationToken([string]$Login)
 	{
-		[System.Object[]] $params = @(
+		[System.Object[]] $par_lst = @(
 			[Octokit.ApiUrls]::UserAdministrationAuthorization($Login),
 			[Octokit.NewImpersonationToken]::new([System.String[]] @("user"))
 		)
-		$res_val = $this._CreateImpersonationToken.Invoke($this.ApiConnection, $params)
+		$res_val = $this._CreateImpersonationToken.Invoke($this.ApiConnection, $par_lst)
 		$res_obj = $res_val.Result
 		return $res_obj["token"]
 	}
@@ -240,7 +240,8 @@ class GheClient
 			$msg_cmd = "echo `"$msg_txt`" | sendmail -t /USER $($Email.Sender)"
 			$CommandList.Add([GheCommand]::new($msg_cmd))
 		}
-		$this.SendCommand($CommandList)
+		if($CommandList.Count)
+			{ $this.SendCommand($CommandList) }
 		return $CommandList
 	}
 

@@ -36,10 +36,13 @@ class GheGHubUserCollection : GheUserCollection
 		#   -u, --users        Limit to non-admin users. Optional.
 		#   -s, --suspended    Limit to suspended users. Optional.
 
-		# Create a Property to save the command (Not a Dictionnary Key !)
+		# The tricky way to set the class property without adding a key / value
+		# pair to the [hashtable].
+		[GheGHubUserCollection].GetProperty("_Command").SetValue(
+			$this, [GheCommandCollection]::new())
 		$CommandObj = [GheCommand]::new("ghe-user-csv -o -d")
-		$this | Add-Member NoteProperty -Name _Command -Value $CommandObj
-		
+		$this._Command.Add($CommandObj)
+
 		# Run ssh command to get the result
 		$GheClient.SendCommand($CommandObj)
 

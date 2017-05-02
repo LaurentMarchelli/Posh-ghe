@@ -178,7 +178,7 @@ Function Sync-GheBranches
 
 		[Parameter(Mandatory=$true, ParameterSetName = "Branches", ValueFromPipeline=$true)]
 		[ValidateNotNullOrEmpty()]
-		[GheBranchCollection] $BranchCollection,
+		[GheBranchCollection] $GheBranchColl,
 
 		[Parameter(Mandatory=$false)]
 		[UInt16] $ExpirationDays = 30,
@@ -196,23 +196,23 @@ Function Sync-GheBranches
 	process
 	{
 		if ($PSCmdlet.ParameterSetName -eq "Branches")
-			{ $GheClient = $BranchCollection._client }
+			{ $GheClient = $GheBranchColl._Client }
 		else
 		{
 			if ($PSCmdlet.ParameterSetName -eq "Connect")
 				{ $GheClient = [GheClient]::new($ServerUri, $AdminToken, $SshHostPort, $SshKeyPath)	}
 
-			$BranchCollection = [GheBranchCollection]::new($GheClient, $Organization, $Repository)
+			$GheBranchColl = [GheBranchCollection]::new($GheClient, $Organization, $Repository)
 		}
 
 		# Compare Github branch against given expiration date
 		$ExpirationDate = [System.DateTimeOffset]::Now.AddDays(-$ExpirationDays).DateTime
-		$GheBranchComp = [GheBranchCompare]::new($BranchCollection, $ExpirationDate, $BranchNameMap)
+		$GheBranchComp = [GheBranchCompare]::new($GheBranchColl, $ExpirationDate, $BranchNameMap)
 		if($CsvExportFile)
 			{ $GheBranchComp.ExportToCsv($CsvExportFile) }
 
 		# Create mail base template from GitHub Enterprise configuration
-		$GheConfig = [GheConfig]::new($GheClient, "^smtp\..*$")
+		$GheConfig = [GheConfig]::Get($this._Client, "^smtp|ldap|core\..*$")
 		$MailTemplate =  @{
 			"From" = [System.Net.Mail.MailAddress]::new($GheConfig["smtp.noreply-address"]);
 			"Sender" = [System.Net.Mail.MailAddress]::new($GheConfig["smtp.support-address"]);
@@ -267,24 +267,27 @@ Function Sync-GheBranches
 		$GheCmdsColl = $GheClient.SendMail($GheMailColl)
 
 		# Dump results
-		$output_txt = "Sent messages Dump"
-		Write-Output ("#" * 100)
-		Write-Output $output_txt.PadLeft((100 + $output_txt.Length) / 2, " ")
-		Write-Output ("#" * 100)
-		$GheCmdsColl | ForEach-Object { $_.Query, $_.Response , ("-" * 100)} | Out-String
+		if($PSCmdlet.MyInvocation.BoundParameters["Verbose"])
+		{
+			$output_txt = "Sent messages Dump"
+			Write-Verbose ("#" * 100)
+			Write-Verbose $output_txt.PadLeft((100 + $output_txt.Length) / 2, " ")
+			Write-Verbose ("#" * 100)
+			$GheCmdsColl | ForEach-Object { $_.Query, $_.Response , ("-" * 100)} | Out-String
 
-		$output_txt = "Results For $Organization/$Repository"
-		Write-Output ("#" * 100)
-		Write-Output $output_txt.PadLeft((100 + $output_txt.Length) / 2, " ")
-		Write-Output ("#" * 100)
-		$brch_count = 0
-		ForEach($grp in $GheBranchComp.Values | Group DiffStatus)
-		{ 
-			Write-Output ("[STATUS] {0:N0} {1}" -f $grp.Count, $grp.Name) 
-			$brch_count += $grp.Count
+			$output_txt = "Results For $Organization/$Repository"
+			Write-Verbose ("#" * 100)
+			Write-Verbose $output_txt.PadLeft((100 + $output_txt.Length) / 2, " ")
+			Write-Verbose ("#" * 100)
+			$brch_count = 0
+			ForEach($grp in $GheBranchComp.Values | Group DiffStatus)
+			{
+				Write-Verbose ("[STATUS] {0:N0} {1}" -f $grp.Count, $grp.Name)
+				$brch_count += $grp.Count
+			}
+			Write-Verbose ("[STATUS] {0:N0} Total" -f $brch_count)
+			Write-Verbose ("[STATUS] {0:N0} Evaluated branches" -f $GheBranchColl.Values.Count)
 		}
-		Write-Output ("[STATUS] {0:N0} Total" -f $brch_count)
-		Write-Output ("[STATUS] {0:N0} Evaluated branches" -f $BranchCollection.Values.Count)
 	}
 }
 
