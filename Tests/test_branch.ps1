@@ -15,6 +15,16 @@ Param(
 ###############################################################################
 #                            Main program
 ###############################################################################
+Begin
+{
+    Write-Debug "PsBoundParameters:"
+    $PSBoundParameters.GetEnumerator() | % { Write-Debug $_ }
+
+	if($PSBoundParameters['Debug']) { $DebugPreference = 'Continue' }
+    Write-Debug "DebugPreference: $DebugPreference"
+
+    Write-Verbose "$($MyInvocation.MyCommand.Name):: Function started"
+}
 Process
 {
 	Import-Module $PSScriptRoot\..\Posh-ghe.psd1
@@ -23,4 +33,8 @@ Process
 
 	# $BranchColl.Values | Out-gridview
 	Remove-Module Posh-ghe
+}
+End
+{
+	Write-Verbose "$($MyInvocation.MyCommand.Name):: Function ended"
 }

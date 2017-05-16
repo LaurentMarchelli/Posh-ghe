@@ -2,11 +2,205 @@
 # ghe_user.psm1 : GheClient Exported Functions
 # 
 
+Function Get-GheUsers
+{
+<#
+	.SYNOPSIS
+		Get GitHub Enterprise Server's user list
+
+	.DESCRIPTION
+
+	.PARAMETER ServerUri
+		Full GitHub Enterprise Server URI, including protocol (http or https)
+
+	.PARAMETER AdminToken
+		GitHub Enterprise Administrator token
+
+	.PARAMETER SshKeyPath
+		SSH RSA private key path used to connect to GitHub Enterprise server with SSH
+
+	.PARAMETER SshHostPort
+		SSH port used to connect to GitHub Enterprise server (default is 122)
+
+	.PARAMETER GheClient
+		GheClient object previously created with Get-GheClient (pipeline value)
+
+	.PARAMETER CsvExportFile
+		Full file path of the comma separated file used to export the GitHub's user list.
+
+	.EXAMPLE
+
+	.NOTES
+		Before using this script, create a SSH key and upload it onto GitHub instance. See links.
+
+	.LINK
+		https://help.github.com/articles/creating-a-personal-access-token-for-the-command-line/
+		https://help.github.com/enterprise/admin/guides/installation/administrative-shell-ssh-access/
+#>
+    [CmdletBinding()]
+	[OutputType([GheGHubUserCollection])]
+
+	Param(
+		[Parameter(Mandatory=$true, ParameterSetName = "Connect")]
+		[ValidateNotNullOrEmpty()]
+		[String] $ServerUri,
+
+		[Parameter(Mandatory=$true, ParameterSetName = "Connect")]
+		[ValidateNotNullOrEmpty()]
+		[String] $AdminToken,
+
+		[Parameter(Mandatory=$true, ParameterSetName = "Connect")]
+		[ValidateNotNullOrEmpty()]
+		[String] $SshKeyPath,
+
+		[Parameter(Mandatory=$false, ParameterSetName = "Connect")]
+		[UInt16] $SshHostPort = 122,
+
+		[Parameter(Mandatory=$true, ParameterSetName = "Session", ValueFromPipeline=$true)]
+		[ValidateNotNullOrEmpty()]
+		[GheClient] $GheClient,
+
+		[Parameter(Mandatory=$false)]
+		[ValidateNotNullOrEmpty()]
+		[String] $CsvExportFile
+	)
+	Begin
+	{
+		Write-Debug "PsBoundParameters:"
+		$PSBoundParameters.GetEnumerator() | % { Write-Debug $_ }
+
+		if($PSBoundParameters['Debug']) { $DebugPreference = 'Continue' }
+		Write-Debug "DebugPreference: $DebugPreference"
+
+		Write-Verbose "$($MyInvocation.MyCommand.Name):: Function started"
+	}
+	Process
+	{
+		if ($PSCmdlet.ParameterSetName -eq "Connect")
+			{ $GheClient = [GheClient]::new($ServerUri, $AdminToken, $SshHostPort, $SshKeyPath)	}
+
+		$GheGHubUsers = [GheGHubUserCollection]::new($GheClient)
+
+		if($CsvExportFile)
+			{ $GheGHubUsers.ExportToCsv($CsvExportFile) }
+
+		return $GheGHubUsers
+	}
+	End
+	{
+		Write-Verbose "$($MyInvocation.MyCommand.Name):: Function ended"
+	}
+}
+
+Function Compare-GheUsers
+{
+<#
+	.SYNOPSIS
+		Compare GitHub Enterprise Server's user list with the given user list.
+
+	.DESCRIPTION
+
+	.PARAMETER ServerUri
+		Full GitHub Enterprise Server URI, including protocol (http or https)
+
+	.PARAMETER AdminToken
+		GitHub Enterprise Administrator token
+
+	.PARAMETER SshKeyPath
+		SSH RSA private key path used to connect to GitHub Enterprise server with SSH
+
+	.PARAMETER SshHostPort
+		SSH port used to connect to GitHub Enterprise server (default is 122)
+
+	.PARAMETER GheClient
+		GheClient object previously created with Get-GheClient (pipeline value)
+
+	.PARAMETER CsvImportFile
+		Full file path of the comma separated file used to export the GitHub's user list.
+
+	.EXAMPLE
+
+	.NOTES
+		Before using this script, create a SSH key and upload it onto GitHub instance. See links.
+
+	.LINK
+		https://help.github.com/articles/creating-a-personal-access-token-for-the-command-line/
+		https://help.github.com/enterprise/admin/guides/installation/administrative-shell-ssh-access/
+#>
+    [CmdletBinding()]
+	[OutputType([GheUserCompare])]
+
+	Param(
+		[Parameter(Mandatory=$true, ParameterSetName = "Coll_Connect")]
+		[Parameter(Mandatory=$true, ParameterSetName = "Impt_Connect")]
+		[ValidateNotNullOrEmpty()]
+		[String] $ServerUri,
+
+		[Parameter(Mandatory=$true, ParameterSetName = "Coll_Connect")]
+		[Parameter(Mandatory=$true, ParameterSetName = "Impt_Connect")]
+		[ValidateNotNullOrEmpty()]
+		[String] $AdminToken,
+
+		[Parameter(Mandatory=$true, ParameterSetName = "Coll_Connect")]
+		[Parameter(Mandatory=$true, ParameterSetName = "Impt_Connect")]
+		[ValidateNotNullOrEmpty()]
+		[String] $SshKeyPath,
+
+		[Parameter(Mandatory=$false, ParameterSetName = "Coll_Connect")]
+		[Parameter(Mandatory=$false, ParameterSetName = "Impt_Connect")]
+		[UInt16] $SshHostPort = 122,
+
+		[Parameter(Mandatory=$true, ParameterSetName = "Coll_Session", ValueFromPipeline=$true)]
+		[Parameter(Mandatory=$true, ParameterSetName = "Impt_Session", ValueFromPipeline=$true)]
+		[ValidateNotNullOrEmpty()]
+		[GheClient] $GheClient,
+
+		[Parameter(Mandatory=$true, ParameterSetName = "Coll_Connect")]
+		[Parameter(Mandatory=$true, ParameterSetName = "Coll_Session")]
+		[ValidateNotNullOrEmpty()]
+		[GheUserCollection] $GheUserColl,
+
+		[Parameter(Mandatory=$true, ParameterSetName = "Impt_Connect")]
+		[Parameter(Mandatory=$true, ParameterSetName = "Impt_Session")]
+		[ValidateNotNullOrEmpty()]
+		[String] $CsvImportFile
+	)
+	Begin
+	{
+		Write-Debug "PsBoundParameters:"
+		$PSBoundParameters.GetEnumerator() | % { Write-Debug $_ }
+
+		if($PSBoundParameters['Debug']) { $DebugPreference = 'Continue' }
+		Write-Debug "DebugPreference: $DebugPreference"
+
+		Write-Verbose "$($MyInvocation.MyCommand.Name):: Function started"
+	}
+	Process
+	{
+		if(($PSCmdlet.ParameterSetName -eq "Coll_Connect") -or
+			($PSCmdlet.ParameterSetName -eq "Impt_Connect"))
+			{ $GheClient = [GheClient]::new($ServerUri, $AdminToken, $SshHostPort, $SshKeyPath)	}
+
+		if(($PSCmdlet.ParameterSetName -eq "Impt_Connect") -or
+			($PSCmdlet.ParameterSetName -eq "Impt_Session"))
+			{ $GheUserColl = [GheUserCollection]::new($CsvImportFile) }
+
+		$GheGHubColl = [GheGHubUserCollection]::new($GheClient)
+		$GheCompare = [GheUserCompare]::new($GheGHubColl, $GheUserColl)
+
+		return $GheCompare
+	}
+	End
+	{
+		Write-Verbose "$($MyInvocation.MyCommand.Name):: Function ended"
+	}
+}
+
 Function Sync-GheUsers
 {
 <#
 	.SYNOPSIS
-		Synchronize GitHub's user list with a given user list.
+		Synchronize GitHub's user list with the given user list.
 
 	.DESCRIPTION
 		The function synchronize a GitHub Enterprise's user list with a given GheUserCollection.
@@ -97,15 +291,23 @@ Function Sync-GheUsers
 			Write-Verbose ("[STATUS] {0:N0} Total" -f $sum_cnt)
 			Write-Verbose ("[STATUS] {0:N0} Evaluated Users" -f $GheCompare.Values.Count)
 		}
+
+		Write-Debug "PsBoundParameters:"
+		$PSBoundParameters.GetEnumerator() | % { Write-Debug $_ }
+
+		if($PSBoundParameters['Debug']) { $DebugPreference = 'Continue' }
+		Write-Debug "DebugPreference: $DebugPreference"
+
+		Write-Verbose "$($MyInvocation.MyCommand.Name):: Function started"
 	}
-	process
+	Process
 	{
 		# Compare Github user list against LDAP user list
 		$GheGHubColl = [GheGHubUserCollection]::new($GheUserColl._Client)
 		$GheCompare = [GheUserCompare]::new($GheGHubColl, $GheUserColl)
 
 		# Do an initial analysis and dump the Result
-		$GheAnalysis = $GheCompare.Analyse($UsersIgnored)
+		$GheAnalysis = $GheCompare.Analyze($UsersIgnored)
 		DumpAnalysis $GheAnalysis "Initial Analysis"
 
 		# Synchronize and dump Synchronization Errors
@@ -140,91 +342,17 @@ Function Sync-GheUsers
 			}
 
 			# Do an final analysis and dump the Result
-			$GheAnalysis = $GheCompare.Analyse($UsersIgnored)
+			$GheAnalysis = $GheCompare.Analyze($UsersIgnored)
 			DumpAnalysis $GheAnalysis "Final Analysis"
 		}
 
 		# Export Comparison Results
 		$GheCompare.ExportToCsv($CsvExportFile)
 	}
-}
-
-Function Get-GheGHubUsers
-{
-<#
-	.SYNOPSIS 
-		Get GitHub Enterprise Server's user list
-
-	.DESCRIPTION
-
-	.PARAMETER ServerUri
-		Full GitHub Enterprise Server URI, including protocol (http or https)
-
-	.PARAMETER AdminToken
-		GitHub Enterprise Administrator token
-
-	.PARAMETER SshKeyPath
-		SSH RSA private key path used to connect to GitHub Enterprise server with SSH
-
-	.PARAMETER SshHostPort
-		SSH port used to connect to GitHub Enterprise server (default is 122)
-
-	.PARAMETER GheClient
-		GheClient object previously created with Get-GheClient (pipeline value)
-
-	.PARAMETER CsvExportFile
-		Full file path of the comma separated file used to export the GitHub's user list.
-    
-	.EXAMPLE
-
-	.NOTES
-		Before using this script, create a SSH key and upload it onto GitHub instance. See links.
-
-	.LINK
-		https://help.github.com/articles/creating-a-personal-access-token-for-the-command-line/
-		https://help.github.com/enterprise/admin/guides/installation/administrative-shell-ssh-access/
-#>
-    [CmdletBinding()]
-	[OutputType([GheGHubUserCollection])]
-
-	Param(
-		[Parameter(Mandatory=$true, ParameterSetName = "Connect")]
-		[ValidateNotNullOrEmpty()]
-		[String] $ServerUri,
-
-		[Parameter(Mandatory=$true, ParameterSetName = "Connect")]
-		[ValidateNotNullOrEmpty()]
-		[String] $AdminToken,
-
-		[Parameter(Mandatory=$true, ParameterSetName = "Connect")]
-		[ValidateNotNullOrEmpty()]
-		[String] $SshKeyPath,
-		
-		[Parameter(Mandatory=$false, ParameterSetName = "Connect")]
-		[UInt16] $SshHostPort = 122,
-
-		[Parameter(Mandatory=$true, ParameterSetName = "Session", ValueFromPipeline=$true)]
-		[ValidateNotNullOrEmpty()]
-		[GheClient] $GheClient,
-
-		[Parameter(Mandatory=$false)]
-		[ValidateNotNullOrEmpty()]
-		[String] $CsvExportFile
-	)
-	Begin {}
-	Process 
+	End
 	{
-		if ($PSCmdlet.ParameterSetName -eq "Connect")
-			{ $GheClient = [GheClient]::new($ServerUri, $AdminToken, $SshHostPort, $SshKeyPath)	}
-
-		$GheGHubUsers = [GheGHubUserCollection]::new($GheClient)
-
-		if($CsvExportFile)
-			{ $GheGHubUsers.ExportToCsv($CsvExportFile) }
-
-		return $GheGHubUsers
+		Write-Verbose "$($MyInvocation.MyCommand.Name):: Function ended"
 	}
-	End {}
 }
 
 Function Get-GheLDAPUsers
@@ -305,7 +433,16 @@ Function Get-GheLDAPUsers
 		[String] $CsvExportFile
 
 	)
-	Begin {}
+	Begin
+	{
+		Write-Debug "PsBoundParameters:"
+		$PSBoundParameters.GetEnumerator() | % { Write-Debug $_ }
+
+		if($PSBoundParameters['Debug']) { $DebugPreference = 'Continue' }
+		Write-Debug "DebugPreference: $DebugPreference"
+
+		Write-Verbose "$($MyInvocation.MyCommand.Name):: Function started"
+	}
 	Process 
 	{
 		if($PSCmdlet.ParameterSetName -eq "Connect")
@@ -320,7 +457,10 @@ Function Get-GheLDAPUsers
 
 		return $GheLDAPUsers
 	}
-	End {}
+	End
+	{
+		Write-Verbose "$($MyInvocation.MyCommand.Name):: Function ended"
+	}
 }
 
 Function Sync-GheLDAPUsers
@@ -420,10 +560,17 @@ Function Sync-GheLDAPUsers
 		[ValidateNotNullOrEmpty()]
 		[String] $CsvExportFile
 	)
-	begin
+	Begin
 	{
+		Write-Debug "PsBoundParameters:"
+		$PSBoundParameters.GetEnumerator() | % { Write-Debug $_ }
+
+		if($PSBoundParameters['Debug']) { $DebugPreference = 'Continue' }
+		Write-Debug "DebugPreference: $DebugPreference"
+
+		Write-Verbose "$($MyInvocation.MyCommand.Name):: Function started"
 	}
-	process
+	Process
 	{
 		if ($PSCmdlet.ParameterSetName -eq "Connect")
 			{ $GheClient = [GheClient]::new($ServerUri, $AdminToken, $SshHostPort, $SshKeyPath)	}
@@ -442,6 +589,10 @@ Function Sync-GheLDAPUsers
 		$NewParams["GheUserColl"] = $GheLDAPColl
 
 		Sync-GheUsers @NewParams
+	}
+	End
+	{
+		Write-Verbose "$($MyInvocation.MyCommand.Name):: Function ended"
 	}
 }
 

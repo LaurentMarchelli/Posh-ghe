@@ -154,7 +154,7 @@ class GheBranchCompare : GheBranchCollection
 		[System.Object[]] $BranchNameMap
 		) : base($SourceColl)
 	{
-		# Analyse the branch Collection
+		# Analyze the branch Collection
 		[Octokit.RepositoryCommitsClient] $cmit_clt = $this.RepoClient.Commit
 		ForEach($brch_obj in $SourceColl.Values)
 		{

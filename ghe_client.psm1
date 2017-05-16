@@ -52,12 +52,20 @@ Function Get-GheClient
 	)
 	Begin
 	{
+		Write-Debug "PsBoundParameters:"
+		$PSBoundParameters.GetEnumerator() | % { Write-Debug $_ }
+
+		if($PSBoundParameters['Debug']) { $DebugPreference = 'Continue' }
+		Write-Debug "DebugPreference: $DebugPreference"
+
+		Write-Verbose "$($MyInvocation.MyCommand.Name):: Function started"
 	}
 	Process 
 	{
 		return [GheClient]::new($ServerUri, $AdminToken, $SshHostPort, $SshKeyPath)
 	}
-	End 
+	End
 	{
+		Write-Verbose "$($MyInvocation.MyCommand.Name):: Function ended"
 	}
 }

@@ -65,6 +65,13 @@ Function Get-GheConfig
 	)
 	Begin
 	{
+		Write-Debug "PsBoundParameters:"
+		$PSBoundParameters.GetEnumerator() | % { Write-Debug $_ }
+
+		if($PSBoundParameters['Debug']) { $DebugPreference = 'Continue' }
+		Write-Debug "DebugPreference: $DebugPreference"
+
+		Write-Verbose "$($MyInvocation.MyCommand.Name):: Function started"
 	}
 	Process 
 	{
@@ -73,7 +80,8 @@ Function Get-GheConfig
 
 		return [GheConfig]::new($GheClient, $Filter)
 	}
-	End 
+	End
 	{
+		Write-Verbose "$($MyInvocation.MyCommand.Name):: Function ended"
 	}
 }

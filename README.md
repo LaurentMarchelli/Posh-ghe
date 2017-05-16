@@ -26,17 +26,25 @@ It allows you to :
 1. From Windows Command Line, install [Posh-SSH](https://github.com/darkoperator/Posh-SSH):<br>
 ``powershell -executionpolicy Bypass -command "Find-Module PoSH-SSH | Install-Module"``
 
+1. From Windows Command Line, install [PsIni](https://github.com/lipkau/PsIni):<br>
+``powershell -executionpolicy Bypass -command "Find-Module PsIni | Install-Module"``
+
 1. Clone this repository<br>
 ``git clone https://github.com/diagnostica-stago/Posh-ghe.git C:\Temp\Posh-ghe``
 
 1. From Powershell, import the module<br>
 ``Import-Module C:\Temp\Posh-ghe.psd1``
 
-1. Have a look to [Tests](tree/master/Tests) subdirectory to have an usage overview.
+1. Have a look to [Tests](Tests) subdirectory to have an usage overview.
 
 1. Have a look to the [Wiki](https://github.com/diagnostica-stago/Posh-ghe/wiki) for further information.
 
 ## ChangeLog
+### Version 0.1.2
+- [Octokit.net v.0.21.1](https://github.com/octokit/octokit.net/releases/tag/v0.21.1)
+- [Posh-SSH v1.7.7 or higher](https://github.com/darkoperator/Posh-SSH/releases)
+- [PsIni v1.2.0 or higher](https://github.com/lipkau/PsIni/releases)
+
 ### Version 0.1.1
 - Initial public version
 - [Octokit.net v.0.21.1](https://github.com/octokit/octokit.net/releases/tag/v0.21.1)

@@ -21,14 +21,35 @@ class GheUser
 
 	# Contructor used to normalize GheUser properties
 	GheUser(
-		[String] $login,
-		[String] $email,
-		[GheUserStatus] $status)
+		[String] $Login,
+		[String] $Email,
+		[GheUserStatus] $Status)
 	{
-		$this.SetLogin($login)
-		if($email)
-			{ $this.email = [System.Net.Mail.MailAddress]::new($email.ToString().ToLower()) }
-		$this.suspension_status = $status
+		$this.SetLogin($Login)
+		$this.SetEmail($Email)
+		$this.suspension_status = $Status
+	}
+
+	# Constructor used to create GheUser from csv import object
+	GheUser([PSObject] $User)
+	{
+		if($User -eq $null)
+			{ $this.suspension_status = [GheUserStatus]::null }
+		else
+		{
+			# Set Specific properties
+			$this.SetLogin($User.login)
+			$this.SetEmail($User.email)
+			if($User.suspension_status)
+				{ $this.suspension_status = [GheUserStatus]($User.suspension_status) }
+			else
+				{ $this.suspension_status = [GheUserStatus]::null }
+
+			# Add non specific properties
+			$exclude =  $this.psobject.properties.ForEach({$_.Name})
+			$User.psobject.properties | Where { $_.Name -notin $exclude } | % {
+				$this | Add-Member -MemberType $_.MemberType -Name $_.Name -Value $_.Value}
+		}
 	}
 
 	# Copy constructors
@@ -50,6 +71,13 @@ class GheUser
 		$this.login = $Login.Replace(".", "-").Replace("_", "-")
 		$this.lograw = $Login
 	}
+	[void] SetEmail([String] $Email)
+	{
+		if($Email)
+			{ $this.email = [System.Net.Mail.MailAddress]::new($Email.ToString().ToLower()) }
+		else
+			{ $this.email = $null }
+	}
 }
 
 Class GheUserCollection : System.Collections.Hashtable
@@ -59,11 +87,34 @@ Class GheUserCollection : System.Collections.Hashtable
 	Hidden [GheCommandCollection] $_Command
 
 	GheUserCollection([GheClient] $GheClient) : base()
+		{ $this._create($GheClient) }
+
+	GheUserCollection([String] $ImportFilePath) : base()
+	{
+		$this._create($null)
+		$this.ImportFromCsv($ImportFilePath)
+	}
+
+	[void] _create([GheClient] $GheClient)
 	{
 		# The tricky way to set the class property without adding a key / value
 		# pair to the [hashtable].
 		[GheUserCollection].GetProperty("_Client").SetValue($this, $GheClient)
 		[GheUserCollection].GetProperty("_Params").SetValue($this, [HashTable]::new())
+	}
+
+	[void] ConvertFromCsv([PSObject[]] $UserRecords)
+	{
+		ConvertFrom-Csv -InputObject $UserRecords | % {
+			$user = [GheUser]::new($_)
+			$this[$user.login] = $user
+		}
+	}
+
+	[void] ImportFromCsv([String] $ImportFilePath)
+	{
+		$fileimport = Get-Content -Path $ImportFilePath -Encoding UTF8
+		$this.ConvertFromCsv($fileimport)
 	}
 
 	[void] ExportToCsv([String] $ExportFilePath)
@@ -87,15 +138,15 @@ Class GheUserCollection : System.Collections.Hashtable
 
 class GheUserDiff : GheUser
 {
-	Hidden [GheUser] $_source
-	Hidden [GheUser] $_target
+	Hidden [GheUser] $_Source
+	Hidden [GheUser] $_Target
 
 	GheUserDiff(
 		[GheUser] $UserSource,
 		[GheUser] $UserTarget) : base($UserSource)
 	{
-		$this._source = $UserSource
-		$this._target = $UserTarget
+		$this._Source = $UserSource
+		$this._Target = $UserTarget
 
 		# Add target specific properties
 		if($UserTarget -eq $null)
@@ -120,10 +171,18 @@ class GheUserDiff : GheUser
 
 Class GheUserCompare : GheUserCollection
 {
+	Hidden [GheUserCollection] $_Source
+	Hidden [GheUserCollection] $_Target
+
 	GheUserCompare(
 		[GheUserCollection] $SourceColl,
 		[GheUserCollection] $TargetColl) : base($SourceColl._Client)
 	{
+		# The tricky way to set the class property without adding a key / value
+		# pair to the [hashtable].
+		[GheUserCompare].GetProperty("_Source").SetValue($this, $SourceColl)
+		[GheUserCompare].GetProperty("_Target").SetValue($this, $TargetColl)
+
 		# Copy Extended parameters from target
 		$TargetColl._Params.Keys | % {
 			$this._Params[$_] = $TargetColl._Params[$_]
@@ -163,7 +222,7 @@ Class GheUserCompare : GheUserCollection
 		}
 	}
 
-	[HashTable] Analyse([String[]] $IgnoreLogins)
+	[HashTable] Analyze([String[]] $IgnoreLogins)
 	{
 		# Create a status and action hashtable
 		$ret_val = @{
@@ -236,7 +295,7 @@ Class GheUserCompare : GheUserCollection
 		{
 			$Analysis["ToEnable"] | % {
 				if($user_admin.Unsuspend($_.login).Result)
-					{ $_.suspension_status = $_._source.suspension_status = [GheUserStatus]::active }
+					{ $_.suspension_status = $_._Source.suspension_status = [GheUserStatus]::active }
 				else
 					{ $synch_err["Enable"].Add($_) }
 			}
@@ -245,7 +304,7 @@ Class GheUserCompare : GheUserCollection
 		{
 			$Analysis["ToDisable"] | % {
 				if($user_admin.Suspend($_.login).Result)
-					{ $_.suspension_status = $_._source.suspension_status = [GheUserStatus]::suspended }
+					{ $_.suspension_status = $_._Source.suspension_status = [GheUserStatus]::suspended }
 				else
 					{ $synch_err["Disable"].Add($_) }
 			}
@@ -263,10 +322,10 @@ Class GheUserCompare : GheUserCollection
 				{
 					if(($_.trg_suspension_status -eq [GheUserStatus]::active) -and
 						($user_admin.Unsuspend($_.login).Result))
-						{ $_.suspension_status = $_._source.suspension_status = [GheUserStatus]::active }
+						{ $_.suspension_status = $_._Source.suspension_status = [GheUserStatus]::active }
 					elseif(($_.trg_suspension_status -eq [GheUserStatus]::suspended) -and
 						($user_admin.Suspend($_.login).Result))
-						{ $_.suspension_status = $_._source.suspension_status = [GheUserStatus]::suspended }
+						{ $_.suspension_status = $_._Source.suspension_status = [GheUserStatus]::suspended }
 					else
 						{ $synch_err["RenameStatus"].Add($_) }
 				}
@@ -284,7 +343,7 @@ Class GheUserCompare : GheUserCollection
 							$_.trg_login, $_.trg_lograw)
 						$mail_lst.Add($mail_obj)
 					}
-					$_.login = $_._source.login = $_.trg_login
+					$_.login = $_._Source.login = $_.trg_login
 				}
 				else
 				{
@@ -306,7 +365,7 @@ Class GheUserCompare : GheUserCollection
 					$_.login = $_.trg_login
 					$_.email = $_.trg_email
 					$_.suspension_status = [GheUserStatus]::active
-					$_._source = [GheUser]::($_)
+					$_._Source = [GheUser]::($_)
 					$synch_ok.Add($_)
 				}
 				else
@@ -316,7 +375,7 @@ Class GheUserCompare : GheUserCollection
 				if($_.trg_suspension_status -eq [GheUserStatus]::suspended)
 				{
 					if($user_admin.Suspend($_.login).Result)
-						{ $_.suspension_status = $_._source.suspension_status = [GheUserStatus]::suspended }
+						{ $_.suspension_status = $_._Source.suspension_status = [GheUserStatus]::suspended }
 					else
 						{ $synch_err["CreateStatus"].Add($_) }
 				}

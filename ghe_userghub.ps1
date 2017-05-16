@@ -2,21 +2,6 @@
 # ghe_userghub.ps1 : GheGHubUser Implementation Classes
 # 
 
-# Github User
-# login,email,role,ssh_keys,org_memberships,repos,suspension_status,last_logged_ip,creation_date
-class GheGHubUser : GheUser
-{
-	# Constructor used to create GheUser from GitHub information
-	GheGHubUser([PSObject] $user) : base(
-		$user.login, $user.email, $user.suspension_status)
-	{
-		# Add non specific properties
-		$exclude =  $this.psobject.properties.ForEach({$_.Name})
-		$user.psobject.properties | Where { $_.Name -notin $exclude } | % {
-			$this | Add-Member -MemberType $_.MemberType -Name $_.Name -Value $_.Value}
-	}
-}
-
 class GheGHubUserCollection : GheUserCollection
 {
 	GheGHubUserCollection([GheClient] $GheClient) : base($GheClient) 
@@ -35,6 +20,10 @@ class GheGHubUserCollection : GheUserCollection
 		#   -a, --admins       Limit to admin users. Optional.
 		#   -u, --users        Limit to non-admin users. Optional.
 		#   -s, --suspended    Limit to suspended users. Optional.
+		#
+		# RETURNS a csv user list with following fields :
+		# login, email, role, ssh_keys, org_memberships, repos,
+		# suspension_status, last_logged_ip, creation_date
 
 		# The tricky way to set the class property without adding a key / value
 		# pair to the [hashtable].
@@ -47,8 +36,6 @@ class GheGHubUserCollection : GheUserCollection
 		$GheClient.SendCommand($CommandObj)
 
 		# Convert csv result into Object list
-		ConvertFrom-Csv -InputObject $CommandObj.Response.Output | ForEach-Object {
-			$user=[GheGHubUser]::new($_)
-			$this.Add($user.login, $user)}
+		$this.ConvertFromCsv($CommandObj.Response.Output)
 	}
 }

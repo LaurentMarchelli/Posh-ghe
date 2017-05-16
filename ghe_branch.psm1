@@ -78,7 +78,16 @@ Function Get-GheBranches
 		[ValidateNotNullOrEmpty()]
 		[String] $CsvExportFile
 	)
-	Begin {}
+	Begin
+	{
+		Write-Debug "PsBoundParameters:"
+		$PSBoundParameters.GetEnumerator() | % { Write-Debug $_ }
+    
+		if($PSBoundParameters['Debug']) { $DebugPreference = 'Continue' }
+		Write-Debug "DebugPreference: $DebugPreference"
+
+		Write-Verbose "$($MyInvocation.MyCommand.Name):: Function started"
+	}
 	Process 
 	{
 		if ($PSCmdlet.ParameterSetName -eq "Connect")
@@ -90,7 +99,10 @@ Function Get-GheBranches
 
 		return $GheBranches
 	}
-	End {}
+	End
+	{
+		Write-Verbose "$($MyInvocation.MyCommand.Name):: Function ended"
+	}
 }
 
 Function Sync-GheBranches
@@ -190,10 +202,17 @@ Function Sync-GheBranches
 		[ValidateNotNullOrEmpty()]
 		[String] $CsvExportFile
 	)
-	begin
+	Begin
 	{
+		Write-Debug "PsBoundParameters:"
+		$PSBoundParameters.GetEnumerator() | % { Write-Debug $_ }
+    
+		if($PSBoundParameters['Debug']) { $DebugPreference = 'Continue' }
+		Write-Debug "DebugPreference: $DebugPreference"
+
+		Write-Verbose "$($MyInvocation.MyCommand.Name):: Function started"
 	}
-	process
+	Process
 	{
 		if ($PSCmdlet.ParameterSetName -eq "Branches")
 			{ $GheClient = $GheBranchColl._Client }
@@ -288,6 +307,10 @@ Function Sync-GheBranches
 			Write-Verbose ("[STATUS] {0:N0} Total" -f $brch_count)
 			Write-Verbose ("[STATUS] {0:N0} Evaluated branches" -f $GheBranchColl.Values.Count)
 		}
+	}
+	End
+	{
+		Write-Verbose "$($MyInvocation.MyCommand.Name):: Function ended"
 	}
 }
 
