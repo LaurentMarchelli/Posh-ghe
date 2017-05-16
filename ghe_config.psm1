@@ -38,7 +38,6 @@ Function Get-GheConfig
 		https://help.github.com/enterprise/admin/guides/installation/administrative-shell-ssh-access/
 #>
     [CmdletBinding()]
-	[OutputType([GheConfig])]
 
 	Param(
 		[Parameter(Mandatory=$true, ParameterSetName = "Connect")]

@@ -44,7 +44,6 @@ Function Get-GheBranches
 		https://help.github.com/enterprise/admin/guides/installation/administrative-shell-ssh-access/
 #>
     [CmdletBinding()]
-	[OutputType([GheBranchCollection])]
 
 	Param(
 		[Parameter(Mandatory=$true, ParameterSetName = "Connect")]

@@ -38,7 +38,6 @@ Function Get-GheUsers
 		https://help.github.com/enterprise/admin/guides/installation/administrative-shell-ssh-access/
 #>
     [CmdletBinding()]
-	[OutputType([GheGHubUserCollection])]
 
 	Param(
 		[Parameter(Mandatory=$true, ParameterSetName = "Connect")]
@@ -128,7 +127,6 @@ Function Compare-GheUsers
 		https://help.github.com/enterprise/admin/guides/installation/administrative-shell-ssh-access/
 #>
     [CmdletBinding()]
-	[OutputType([GheUserCompare])]
 
 	Param(
 		[Parameter(Mandatory=$true, ParameterSetName = "Coll_Connect")]
@@ -402,7 +400,6 @@ Function Get-GheLDAPUsers
 		https://help.github.com/enterprise/admin/guides/installation/administrative-shell-ssh-access/
 #>
     [CmdletBinding()]
-	[OutputType([GheLDAPUserCollection])]
 
 	Param(
 		[Parameter(Mandatory=$true, ParameterSetName = "Connect")]

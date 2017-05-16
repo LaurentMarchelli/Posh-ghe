@@ -32,7 +32,6 @@ Function Get-GheClient
 		https://help.github.com/enterprise/admin/guides/installation/administrative-shell-ssh-access/
 #>
     [CmdletBinding()]
-	[OutputType([GheClient])]
 
 	Param(
 		[Parameter(Mandatory=$true)]
