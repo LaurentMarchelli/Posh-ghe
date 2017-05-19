@@ -1,5 +1,5 @@
 #
-# test_ldap.ps1
+# test_userldap.ps1
 #
 
 Param(

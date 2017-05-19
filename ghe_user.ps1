@@ -82,12 +82,56 @@ class GheUser
 
 Class GheUserCollection : System.Collections.Hashtable
 {
+	# Instance (GheUserCollection) Singleton pattern
+	static [GheUserCollection] Get([GheClient] $GheClient)
+	{
+		# Create the User Collection cache if it does not exists
+		if($GheClient._Users -eq $null)
+		{
+			# Usage: ghe-user-csv [options]
+			#
+			# This utility dumps out a list of all the users in the installation in CSV
+			# format. This information includes login, email address, permission level
+			# (admin or user), how many repositories they have, ssh keys, and the last
+			# logged IP address.
+			#
+			# OPTIONS:
+			#   -h, --help         Show this message
+			#   -d, --header       Display header row. Defaults to false.
+			#   -o, --stdout       Print output to STDOUT. Optional.
+			#   -a, --admins       Limit to admin users. Optional.
+			#   -u, --users        Limit to non-admin users. Optional.
+			#   -s, --suspended    Limit to suspended users. Optional.
+			#
+			# RETURNS a csv user list with following fields :
+			# login, email, role, ssh_keys, org_memberships, repos,
+			# suspension_status, last_logged_ip, creation_date
+			$user_coll = [GheUserCollection]::new($GheClient, [GheCommand]::new("ghe-user-csv -o -d"))
+			$GheClient | Add-Member NoteProperty -Name _Users -Value $user_coll -Force
+		}
+		return $GheClient._Users
+	}
+
 	Hidden [GheClient] $_Client
 	Hidden [HashTable] $_Params
 	Hidden [GheCommandCollection] $_Command
 
 	GheUserCollection([GheClient] $GheClient) : base()
 		{ $this._create($GheClient) }
+
+	GheUserCollection(
+		[GheClient] $GheClient,
+		[GheCommand] $GheCommand) : base()
+	{
+		$this._create($GheClient)
+		$this._Command.Add($GheCommand)
+
+		# Run ssh command to get the result
+		$GheClient.SendCommand($GheCommand)
+
+		# Convert csv result into Object list
+		$this.ConvertFromCsv($GheCommand.Response.Output)
+	}
 
 	GheUserCollection([String] $ImportFilePath) : base()
 	{
@@ -101,6 +145,7 @@ Class GheUserCollection : System.Collections.Hashtable
 		# pair to the [hashtable].
 		[GheUserCollection].GetProperty("_Client").SetValue($this, $GheClient)
 		[GheUserCollection].GetProperty("_Params").SetValue($this, [HashTable]::new())
+		[GheUserCollection].GetProperty("_Command").SetValue($this, [GheCommandCollection]::new())
 	}
 
 	[void] ConvertFromCsv([PSObject[]] $UserRecords)

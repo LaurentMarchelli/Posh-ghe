@@ -175,11 +175,6 @@ class GheLDAPUserCollection : GheUserCollection
 		}
 		$this._Params["Mail.Rename"] = $this._Client.Params["GheLDAPUserCollection.Mail.Rename"]
 
-		# The tricky way to set the class property without adding a key / value
-		# pair to the [hashtable].
-		$CommandList = [GheCommandCollection]::new()
-		[GheLDAPUserCollection].GetProperty("_Command").SetValue($this, $CommandList)
-		
 		# Prepare ldapsearch command line with configuration parameters
 		# http://www.openldap.org/software/man.cgi?query=ldapsearch&apropos=0&sektion=0&manpath=OpenLDAP+2.0-Release&format=html
 		# H : Specify URI(s) referring to the ldap server(s)
@@ -205,16 +200,16 @@ class GheLDAPUserCollection : GheUserCollection
 			$config["ldap.profile.name"],
 			$config["ldap.profile.mail"])
 		ForEach($ldap_dn in $CommandObj.Ldif["member"])
-			{ $CommandList.Add([GheLDAPRequest]::new($CommandText -f $ldap_dn)) }
-		$GheClient.SendCommand($CommandList)
+			{ $this._Command.Add([GheLDAPRequest]::new($CommandText -f $ldap_dn)) }
+		$GheClient.SendCommand($this._Command)
 
 		# Create GheLDAPUser objects from LDIF results
-		$CommandList.ForEach({
+		$this._Command.ForEach({
 			$user=[GheLDAPUser]::new($config, $_.Ldif, $SuspendedRegEx)
 			$this.Add($user.login, $user)})
 
 		# Insert the Run ldapsearch group command at the top of the command list
-		$CommandList.Insert(0,$CommandObj)
+		$this._Command.Insert(0,$CommandObj)
 	}
 
 	[void] ExportToCsv([String] $ExportFilePath)

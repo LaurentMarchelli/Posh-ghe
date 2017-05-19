@@ -31,11 +31,13 @@ Function Get-GheUsers
 	.EXAMPLE
 
 	.NOTES
-		Before using this script, create a SSH key and upload it onto GitHub instance. See links.
-
-	.LINK
+		Before using this script, create a SSH key and upload it onto GitHub instance.
 		https://help.github.com/articles/creating-a-personal-access-token-for-the-command-line/
 		https://help.github.com/enterprise/admin/guides/installation/administrative-shell-ssh-access/
+
+	.LINK
+		Get-GheClient
+
 #>
     [CmdletBinding()]
 
@@ -78,7 +80,7 @@ Function Get-GheUsers
 		if ($PSCmdlet.ParameterSetName -eq "Connect")
 			{ $GheClient = [GheClient]::new($ServerUri, $AdminToken, $SshHostPort, $SshKeyPath)	}
 
-		$GheGHubUsers = [GheGHubUserCollection]::new($GheClient)
+		$GheGHubUsers = [GheUserCollection]::Get($GheClient)
 
 		if($CsvExportFile)
 			{ $GheGHubUsers.ExportToCsv($CsvExportFile) }
@@ -183,7 +185,7 @@ Function Compare-GheUsers
 			($PSCmdlet.ParameterSetName -eq "Impt_Session"))
 			{ $GheUserColl = [GheUserCollection]::new($CsvImportFile) }
 
-		$GheGHubColl = [GheGHubUserCollection]::new($GheClient)
+		$GheGHubColl = [GheUserCollection]::Get($GheClient)
 		$GheCompare = [GheUserCompare]::new($GheGHubColl, $GheUserColl)
 
 		return $GheCompare
@@ -301,7 +303,7 @@ Function Sync-GheUsers
 	Process
 	{
 		# Compare Github user list against LDAP user list
-		$GheGHubColl = [GheGHubUserCollection]::new($GheUserColl._Client)
+		$GheGHubColl = [GheUserCollection]::Get($GheUserColl._Client)
 		$GheCompare = [GheUserCompare]::new($GheGHubColl, $GheUserColl)
 
 		# Do an initial analysis and dump the Result

@@ -30,7 +30,7 @@ class GheBranch
 class GheBranchCollection
 {
 	Hidden [GheClient] $_Client
-	Hidden [GheGHubUserCollection] $_Users
+	Hidden [GheUserCollection] $_Users
 	[Octokit.RepositoriesClient] $RepoClient
 	[Octokit.Repository] $RepoObject
 	[System.Collections.ArrayList] $Values
@@ -276,7 +276,7 @@ class GheBranchCompare : GheBranchCollection
 	{
 		# Get the user collection if it does not already exist
 		if(!$this._Users)
-			{ $this._Users = [GheGHubUserCollection]::new($this._Client) }
+			{ $this._Users = [GheUserCollection]::Get($this._Client) }
 
 		# Create message for all concerned and identified users
 		$mail_coll = [GheMailMsgCollection]::new()
