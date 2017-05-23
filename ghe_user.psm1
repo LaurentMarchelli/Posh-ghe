@@ -9,6 +9,9 @@ Function Get-GheUsers
 		Get GitHub Enterprise Server's user list
 
 	.DESCRIPTION
+		This function uses the ssh protocol to connect to the GitHub Appliance and
+		extract the complete GitHub apppliance's user list with the ghe-user-csv command.
+		https://help.github.com/enterprise/admin/articles/command-line-utilities/#ghe-user-csv
 
 	.PARAMETER ServerUri
 		Full GitHub Enterprise Server URI, including protocol (http or https)
@@ -28,7 +31,27 @@ Function Get-GheUsers
 	.PARAMETER CsvExportFile
 		Full file path of the comma separated file used to export the GitHub's user list.
 
+	.OUTPUTS
+		[GheUserCollection]
+		GheUserCollection is a [System.Collections.Hashtable] specialization containing [GheUser]
+		objects indexed by login.
+
 	.EXAMPLE
+		$Params = @{
+			ServerUri =  "http://github.mycompany.com/"
+			AdminToken = "636e3227468e4e09f397e3ecb26860eed9fbeaff"
+			SshKeyPath = join-path $env:HOMEPATH ".ssh/github.mycompany.com_rsa"
+		}
+		$ghe_users = Get-GheUsers @Params
+
+	.EXAMPLE
+		$Params = @{
+			ServerUri =  "http://github.mycompany.com/"
+			AdminToken = "636e3227468e4e09f397e3ecb26860eed9fbeaff"
+			SshKeyPath = join-path $env:HOMEPATH ".ssh/github.mycompany.com_rsa"
+		}
+		$ghe_client = Get-GheClient @Params
+		$ghe_users = $ghe_client | Get-GheUsers
 
 	.NOTES
 		Before using this script, create a SSH key and upload it onto GitHub instance.
@@ -37,6 +60,10 @@ Function Get-GheUsers
 
 	.LINK
 		Get-GheClient
+		Compare-GheUsers
+		Sync-GheUsers
+		Get-GheLDAPUsers
+		Sync-GheLDAPUsers
 
 #>
     [CmdletBinding()]
@@ -100,6 +127,14 @@ Function Compare-GheUsers
 		Compare GitHub Enterprise Server's user list with the given user list.
 
 	.DESCRIPTION
+		The given list used to compare against the current appliance user list may be a
+		GheUserColl	previously optained with this api and eventually modified for specific
+		purpose, or	an external csv file (CsvImportFile) with the right format.
+		The returned value is a collection of [GheUserDiff] containing the match found in each
+		[GheUserCollection]. Matching is made by login or email address if the login match
+		failed.
+		To get difference result, call $GheCompare.Analyze([String[]] $IgnoreLogins) where 
+		$IgnoreLogins is the list of login that must be ignored in the comparison.
 
 	.PARAMETER ServerUri
 		Full GitHub Enterprise Server URI, including protocol (http or https)
@@ -116,17 +151,48 @@ Function Compare-GheUsers
 	.PARAMETER GheClient
 		GheClient object previously created with Get-GheClient (pipeline value)
 
+	.PARAMETER GheUserColl
+		GheUserColl object previously created with this api.
+
 	.PARAMETER CsvImportFile
-		Full file path of the comma separated file used to export the GitHub's user list.
+		Full file path of the comma separated file used to import the GitHub's user list used
+		to compare.
+
+	.OUTPUTS
+		[GheUserCompare]
+		GheUserCompare is a [System.Collections.Hashtable] specialization containing [GheUserDiff]
+		indexed by login.
 
 	.EXAMPLE
+		$Params = @{
+			ServerUri =  "http://github.mycompany.com/"
+			AdminToken = "636e3227468e4e09f397e3ecb26860eed9fbeaff"
+			SshKeyPath = join-path $env:HOMEPATH ".ssh/github.mycompany.com_rsa"
+		}
+		$ghe_users = Get-GheUsers @Params
+		$ghe_usrcmp = Compare-GheUsers @Params -GheUserColl $ghe_users
+
+	.EXAMPLE
+		$Params = @{
+			ServerUri =  "http://github.mycompany.com/"
+			AdminToken = "636e3227468e4e09f397e3ecb26860eed9fbeaff"
+			SshKeyPath = join-path $env:HOMEPATH ".ssh/github.mycompany.com_rsa"
+		}
+		$ghe_client = Get-GheClient @Params
+		$ghe_users = $ghe_client | Get-GheUsers
+		$ghe_usrcmp = $ghe_client | Compare-GheUsers -GheUserColl $ghe_users
 
 	.NOTES
-		Before using this script, create a SSH key and upload it onto GitHub instance. See links.
-
-	.LINK
+		Before using this script, create a SSH key and upload it onto GitHub instance.
 		https://help.github.com/articles/creating-a-personal-access-token-for-the-command-line/
 		https://help.github.com/enterprise/admin/guides/installation/administrative-shell-ssh-access/
+
+	.LINK
+		Get-GheClient
+		Get-GheUsers
+		Sync-GheUsers
+		Get-GheLDAPUsers
+		Sync-GheLDAPUsers
 #>
     [CmdletBinding()]
 
@@ -203,29 +269,53 @@ Function Sync-GheUsers
 		Synchronize GitHub's user list with the given user list.
 
 	.DESCRIPTION
-		The function synchronize a GitHub Enterprise's user list with a given GheUserCollection.
-		The given GheUserCollection must have been created with a Get-GheUser function.
-		Before calling this function, the given GheUserCollection may have been modified for specific purpose.
+		The function synchronize a GitHub Enterprise's user list with the given [GheUserCollection].
+		The given [GheUserCollection] must have been created with a Get-GheUser function and may
+		have eventually been modified for specific purpose.
 
 	.PARAMETER GheUserColl
-
+		GheUserColl object previously created with this api. (pipeline value)
 
 	.PARAMETER UsersIgnored
 		List of GitHub local user's login who must be ignored during the comparaison and the synchronization.
+		Usually technical GitHub accounts, without any equivallence in the LDAP directory.
 
 	.PARAMETER SyncAction
+		String flag enumeration of actions allowed during the Synchronization :
+		"Enable, Disable, Create, Rename" or "None".
+		Default value is "Enable, Disable, Create, Rename".
 
 	.PARAMETER CsvExportFile
-		Full file path of the comma separated file used to export the comparison between the
-		GitHub's user list and the given GheUserCollection after the synchronization is done.
+		Full file path of the comma separated file used to export the comparison [GheUserCompare]
+		between the	GitHub's user list and the given [GheUserCollection] after the synchronization
+		is done.
 
 	.EXAMPLE
+		$Params = @{
+			ServerUri =  "http://github.mycompany.com/"
+			AdminToken = "636e3227468e4e09f397e3ecb26860eed9fbeaff"
+			SshKeyPath = join-path $env:HOMEPATH ".ssh/github.mycompany.com_rsa"
+		}
+		$ghe_users = Get-GheLDAPUsers @Params -SuspendedRegEx "^(?!.*OU=users).*$"
+		$ghe_users | Sync-GheUsers -SyncAction "Disable, Rename" -Verbose
+
+	.EXAMPLE
+		$Params = @{
+			ServerUri =  "http://github.mycompany.com/"
+			AdminToken = "636e3227468e4e09f397e3ecb26860eed9fbeaff"
+			SshKeyPath = join-path $env:HOMEPATH ".ssh/github.mycompany.com_rsa"
+		}
+		$ghe_client = Get-GheClient @Params
+		$ghe_client | Sync-GheUsers -SuspendedRegEx "^(?!.*OU=users).*$" -Verbose
 
 	.NOTES
-		Before using this script, create a SSH key and upload it onto GitHub instance. See links.
+		Before using this script, create a SSH key and upload it onto GitHub instance.
+		https://help.github.com/enterprise/admin/guides/user-management/using-ldap/
+		https://help.github.com/articles/creating-a-personal-access-token-for-the-command-line/
+		https://help.github.com/enterprise/admin/guides/installation/administrative-shell-ssh-access/
 
 		The function compares both list and analyses differences, if a synchronization is needed, 
-		it will try to synchronize user status and create new users :
+		it will try to synchronize user status and create new users (depending on SyncAction flag) :
 		- User not found in given GheUserCollection are suspended in GitHub.
 		- User found in given GheUserCollection is created in GitHub, if he does not already exist.
 		- User found in given GheUserCollection are actived in GitHub, if he already exists.
@@ -234,9 +324,11 @@ Function Sync-GheUsers
 		full information, use the -verbose flags.
 
 	.LINK
-		https://help.github.com/enterprise/admin/guides/user-management/using-ldap/
-		https://help.github.com/articles/creating-a-personal-access-token-for-the-command-line/
-		https://help.github.com/enterprise/admin/guides/installation/administrative-shell-ssh-access/
+		Get-GheClient
+		Get-GheUsers
+		Compare-GheUsers
+		Get-GheLDAPUsers
+		Sync-GheLDAPUsers
 #>
 
     [CmdletBinding()]
@@ -386,10 +478,32 @@ Function Get-GheLDAPUsers
 	.PARAMETER CsvExportFile
 		Full file path of the comma separated file used to export the LDAP's user list.
     
+	.OUTPUTS
+		[GheLDAPUserCollection]
+		GheUserCollection is a [System.Collections.Hashtable] specialization containing [GheUser]
+		indexed by login.
+
 	.EXAMPLE
+		$Params = @{
+			ServerUri =  "http://github.mycompany.com/"
+			AdminToken = "636e3227468e4e09f397e3ecb26860eed9fbeaff"
+			SshKeyPath = join-path $env:HOMEPATH ".ssh/github.mycompany.com_rsa"
+		}
+		$ghe_users = Get-GheLDAPUsers @Params -SuspendedRegEx "^(?!.*OU=users).*$"
+
+	.EXAMPLE
+		$Params = @{
+			ServerUri =  "http://github.mycompany.com/"
+			AdminToken = "636e3227468e4e09f397e3ecb26860eed9fbeaff"
+			SshKeyPath = join-path $env:HOMEPATH ".ssh/github.mycompany.com_rsa"
+		}
+		$ghe_client = Get-GheClient @Params
+		$ghe_users = $ghe_client | Get-GheLDAPUsers -SuspendedRegEx "^(?!.*OU=users).*$"
 
 	.NOTES
-		Before using this script, create a SSH key and upload it onto GitHub instance. See links.
+		Before using this script, create a SSH key and upload it onto GitHub instance.
+		https://help.github.com/articles/creating-a-personal-access-token-for-the-command-line/
+		https://help.github.com/enterprise/admin/guides/installation/administrative-shell-ssh-access/
 
 		SuspendedRegEx can be inclusive or exclusive, for instance :
 			# When suspended users are removed from the LDAP group named "users"
@@ -398,8 +512,11 @@ Function Get-GheLDAPUsers
 			$SuspendedRegEx = "^.*OU=disabled.*$"
 
 	.LINK
-		https://help.github.com/articles/creating-a-personal-access-token-for-the-command-line/
-		https://help.github.com/enterprise/admin/guides/installation/administrative-shell-ssh-access/
+		Get-GheClient
+		Get-GheUsers
+		Compare-GheUsers
+		Sync-GheUsers
+		Sync-GheLDAPUsers
 #>
     [CmdletBinding()]
 
@@ -470,7 +587,7 @@ Function Sync-GheLDAPUsers
 
 	.DESCRIPTION
 		The function synchronize a GitHub Enterprise's user list when your server is configured 
-		to use LDAP authentication, but not the LDAP synchronization.
+		to use LDAP authentication, but not LDAP synchronization.
 
 	.PARAMETER ServerUri
 		Full GitHub Enterprise Server URI, including protocol (http or https)
@@ -494,18 +611,39 @@ Function Sync-GheLDAPUsers
 		List of GitHub local user's login who must be ignored during the comparaison and the synchronization.
 
 	.PARAMETER SyncAction
+		String flag enumeration of actions allowed during the Synchronization : "Enable, Disable, Create, Rename"
+		or "None". Default value is "Enable, Disable, Create, Rename".
 
 	.PARAMETER CsvExportFile
 		Full file path of the comma separated file used to export the comparison between the
 		GitHub's user list and the LDAP's user list after the synchronization is done.
 
 	.EXAMPLE
+		$Params = @{
+			ServerUri =  "http://github.mycompany.com/"
+			AdminToken = "636e3227468e4e09f397e3ecb26860eed9fbeaff"
+			SshKeyPath = join-path $env:HOMEPATH ".ssh/github.mycompany.com_rsa"
+			SyncAction = "Disable, Rename"
+		}
+		Sync-GheLDAPUsers @Params -SuspendedRegEx "^(?!.*OU=users).*$" -Verbose
+
+	.EXAMPLE
+		$Params = @{
+			ServerUri =  "http://github.mycompany.com/"
+			AdminToken = "636e3227468e4e09f397e3ecb26860eed9fbeaff"
+			SshKeyPath = join-path $env:HOMEPATH ".ssh/github.mycompany.com_rsa"
+		}
+		$ghe_client = Get-GheClient @Params
+		$ghe_client | Sync-GheLDAPUsers -SuspendedRegEx "^(?!.*OU=users).*$" -Verbose
 
 	.NOTES
-		Before using this script, create a SSH key and upload it onto GitHub instance. See links.
+		Before using this script, create a SSH key and upload it onto GitHub instance.
+		https://help.github.com/enterprise/admin/guides/user-management/using-ldap/
+		https://help.github.com/articles/creating-a-personal-access-token-for-the-command-line/
+		https://help.github.com/enterprise/admin/guides/installation/administrative-shell-ssh-access/
 
 		The function compares both list and analyses differences, if a synchronization is needed, 
-		it will try to synchronize user status and create new users :
+		it will try to synchronize user status and create new users (depending on SyncAction flag) :
 		- User not found in LDAP are suspended in GitHub.
 		- User found in LDAP is created in GitHub, if he does not already exist.
 		- User found in LDAP are actived in GitHub, if he already exists.
@@ -520,9 +658,11 @@ Function Sync-GheLDAPUsers
 			$SuspendedRegEx = "^.*OU=disabled.*$"
 
 	.LINK
-		https://help.github.com/enterprise/admin/guides/user-management/using-ldap/
-		https://help.github.com/articles/creating-a-personal-access-token-for-the-command-line/
-		https://help.github.com/enterprise/admin/guides/installation/administrative-shell-ssh-access/
+		Get-GheClient
+		Get-GheUsers
+		Compare-GheUsers
+		Sync-GheUsers
+		Get-GheLDAPUsers
 #>
 
     [CmdletBinding()]
