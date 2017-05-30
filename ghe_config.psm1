@@ -9,6 +9,10 @@ Function Get-GheConfig
 		Get GitHub Enterprise Server's configuration.
 
 	.DESCRIPTION
+		The returned object is a Dictionnary containing part or all GitHub Enterprise
+		Server configuration parameters.
+		The Filter parameter is a RegEx string allowing to reduce the scope of requested 
+		configuration.
 
 	.PARAMETER ServerUri
 		Full GitHub Enterprise Server URI, including protocol (http or https)
@@ -28,17 +32,36 @@ Function Get-GheConfig
 	.PARAMETER Filter
 		Expression used to limit the configuration result keys to RegEx evaluation.
 
+	.OUTPUTS
+		[GheConfig]
+
 	.EXAMPLE
+		# Return the full GitHub Enterprise Configuration
+		$Params = @{
+			ServerUri =  "http://github.mycompany.com/"
+			AdminToken = "636e3227468e4e09f397e3ecb26860eed9fbeaff"
+			SshKeyPath = join-path $env:HOMEPATH ".ssh/github.mycompany.com_rsa"
+		}
+		Get-GheConfig @Params
+
+	.EXAMPLE
+		# Return configuration for smtp, ldap and core
+		$Params = @{
+			ServerUri =  "http://github.mycompany.com/"
+			AdminToken = "636e3227468e4e09f397e3ecb26860eed9fbeaff"
+			SshKeyPath = join-path $env:HOMEPATH ".ssh/github.mycompany.com_rsa"
+		}
+		Get-GheClient @Params | Get-GheConfig -Filter "^(smtp|ldap|core)\..*$"
 
 	.NOTES
-		Before using this script, create a SSH key and upload it onto GitHub instance. See links.
-
-	.LINK
+		Before using this script, create a SSH key and upload it onto GitHub instance.
 		https://help.github.com/articles/creating-a-personal-access-token-for-the-command-line/
 		https://help.github.com/enterprise/admin/guides/installation/administrative-shell-ssh-access/
+
+	.LINK
+		Get-GheClient
 #>
     [CmdletBinding()]
-	[OutputType([GheConfig])]
 
 	Param(
 		[Parameter(Mandatory=$true, ParameterSetName = "Connect")]
@@ -65,6 +88,13 @@ Function Get-GheConfig
 	)
 	Begin
 	{
+		Write-Debug "PsBoundParameters:"
+		$PSBoundParameters.GetEnumerator() | % { Write-Debug $_ }
+
+		if($PSBoundParameters['Debug']) { $DebugPreference = 'Continue' }
+		Write-Debug "DebugPreference: $DebugPreference"
+
+		Write-Verbose "$($MyInvocation.MyCommand.Name):: Function started"
 	}
 	Process 
 	{
@@ -73,7 +103,8 @@ Function Get-GheConfig
 
 		return [GheConfig]::new($GheClient, $Filter)
 	}
-	End 
+	End
 	{
+		Write-Verbose "$($MyInvocation.MyCommand.Name):: Function ended"
 	}
 }

@@ -9,6 +9,18 @@ Function Get-GheBranches
 		Get GitHub's branches for requested repository
 
 	.DESCRIPTION
+		Get the list of all branches for the requested repository.
+		The Function returns a GheBranchCollection with a "Value" property containing the array
+		list of branches.
+		Each GheBranch object contained in the collection have following properties :
+			[String] Owner (aka Organization)
+			[String] Repository
+			[String] Name (Branch name)
+			[Boolean] Protected
+			[System.DateTime] CommitterDate
+			[String] CommitterLogin
+			[String] CommitterEmail
+			[String] Sha
 
 	.PARAMETER ServerUri
 		Full GitHub Enterprise Server URI, including protocol (http or https)
@@ -32,20 +44,41 @@ Function Get-GheBranches
 		Repository name (url syntax)
 	
 	.PARAMETER CsvExportFile
-		Full file path of the comma separated file used to export the GitHub's user list.
-    
+		Full file path of the comma separated file used to export the GitHub's branch list.
+
+	.OUTPUTS
+		[GheBranchCollection]
+
 	.EXAMPLE
+		$Params = @{
+			ServerUri =  "http://github.mycompany.com/"
+			AdminToken = "636e3227468e4e09f397e3ecb26860eed9fbeaff"
+			SshKeyPath = join-path $env:HOMEPATH ".ssh/github.mycompany.com_rsa"
+			Organization = "MyOrganization"
+			Repository = "MyRepository"
+		}
+		$ghe_branches = Get-GheBranches @Params
+		$ghe_branches.Values | Out-GridView
+
+	.EXAMPLE
+		$Params = @{
+			ServerUri =  "http://github.mycompany.com/"
+			AdminToken = "636e3227468e4e09f397e3ecb26860eed9fbeaff"
+			SshKeyPath = join-path $env:HOMEPATH ".ssh/github.mycompany.com_rsa"
+		}
+		$ghe_client = Get-GheClient @Params
+		$ghe_branches = $ghe_client | Get-GheBranches -Organization "MyOrganization" -Repository "MyRepository"
+
 
 	.NOTES
-		Before using this script, create a SSH key and upload it onto GitHub instance. See links.
-
-	.LINK
+		Before using this script, create a SSH key and upload it onto GitHub instance.
 		https://help.github.com/articles/creating-a-personal-access-token-for-the-command-line/
 		https://help.github.com/enterprise/admin/guides/installation/administrative-shell-ssh-access/
+
+	.LINK
+		Get-GheClient
 #>
     [CmdletBinding()]
-	[OutputType([GheBranchCollection])]
-
 	Param(
 		[Parameter(Mandatory=$true, ParameterSetName = "Connect")]
 		[ValidateNotNullOrEmpty()]
@@ -78,7 +111,16 @@ Function Get-GheBranches
 		[ValidateNotNullOrEmpty()]
 		[String] $CsvExportFile
 	)
-	Begin {}
+	Begin
+	{
+		Write-Debug "PsBoundParameters:"
+		$PSBoundParameters.GetEnumerator() | % { Write-Debug $_ }
+    
+		if($PSBoundParameters['Debug']) { $DebugPreference = 'Continue' }
+		Write-Debug "DebugPreference: $DebugPreference"
+
+		Write-Verbose "$($MyInvocation.MyCommand.Name):: Function started"
+	}
 	Process 
 	{
 		if ($PSCmdlet.ParameterSetName -eq "Connect")
@@ -90,7 +132,10 @@ Function Get-GheBranches
 
 		return $GheBranches
 	}
-	End {}
+	End
+	{
+		Write-Verbose "$($MyInvocation.MyCommand.Name):: Function ended"
+	}
 }
 
 Function Sync-GheBranches
@@ -100,8 +145,10 @@ Function Sync-GheBranches
 		Sync GitHub's branches for requested repository
 
 	.DESCRIPTION
-		Send an email to each GitHub's used who own bad named or expired branches to 
-		request action like renaming or deletion.
+		Send an email to each GitHub's user who own bad named or expired branches to request action
+		like renaming or deletion.
+		This function does not delete any existing branch, it just send a mail to the last branch's
+		commiter.
 
 	.PARAMETER ServerUri
 		Full GitHub Enterprise Server URI, including protocol (http or https)
@@ -129,20 +176,70 @@ Function Sync-GheBranches
 
 	.PARAMETER BranchNameMap
 		Array of tuples used for branch name check and target branch merging resolution.
-		Each tuples in the array should have a string regex used on the developper branch's
-		name and an output format string to deduce the target branch's name.
+		Each tuples in the array should have a string regex used on the developper branch's name and
+		an output format string to deduce the target branch's name.
 
 	.PARAMETER CsvExportFile
 		Full file path of the comma separated file used to export the GitHub's branch list.
+
+	.OUTPUTS
+		[System.Collections.ArrayList]
+		Array list containing all send email commands executed.
     
 	.EXAMPLE
+		$Params = @{
+			ServerUri =  "http://github.mycompany.com/"
+			AdminToken = "636e3227468e4e09f397e3ecb26860eed9fbeaff"
+			SshKeyPath = join-path $env:HOMEPATH ".ssh/github.mycompany.com_rsa"
+			Organization = "MyOrganization"
+			Repository = "MyRepository"
+			ExpirationDays = 60
+		}
+		$ghe_cmds = Sync-GheBranches @Params
+		$ghe_cmds | Out-GridView
+
+	.EXAMPLE
+		$Params = @{
+			ServerUri =  "http://github.mycompany.com/"
+			AdminToken = "636e3227468e4e09f397e3ecb26860eed9fbeaff"
+			SshKeyPath = join-path $env:HOMEPATH ".ssh/github.mycompany.com_rsa"
+			Organization = "MyOrganization"
+			Repository = "MyRepository"
+		}
+		$ghe_branches = Get-GheBranches @Params
+		$ghe_cmds = $ghe_branches | Sync-GheBranches -ExpirationDays 60
+		$ghe_cmds | Out-GridView
+
+	.EXAMPLE
+		# This sample describe the BranchNameMap usage
+		# All branches named with feature/<nb> or bugfix/<nb> must be merged in a release/<nb> branch
+		# where <nb> is the release number.
+		# All branches named integration must be merged into the master branch
+		$Params = @{
+			ServerUri =  "http://github.mycompany.com/"
+			AdminToken = "636e3227468e4e09f397e3ecb26860eed9fbeaff"
+			SshKeyPath = join-path $env:HOMEPATH ".ssh/github.mycompany.com_rsa"
+			Organization = "MyOrganization"
+			Repository = "MyRepository"
+			ExpirationDays = 60
+			BranchNameMap = @(
+				@([RegEx]::new("^(feature|bugfix)\/(\d*)\/.*$"), "release/{2}"),
+				@([RegEx]::new("^integration\/.*$"), "master")
+			)
+		}
+		$ghe_cmds = Sync-GheBranches @Params
+		$ghe_cmds | Out-GridView
 
 	.NOTES
-		Before using this script, create a SSH key and upload it onto GitHub instance. See links.
-
-	.LINK
+		Email settings must be correctly configured on your Github appliance. (Check management
+		console).
+		Before using this script, create a SSH key and upload it onto GitHub instance.
 		https://help.github.com/articles/creating-a-personal-access-token-for-the-command-line/
 		https://help.github.com/enterprise/admin/guides/installation/administrative-shell-ssh-access/
+
+	.LINK
+		Get-GheClient
+		Get-GheBranches
 #>
 
     [CmdletBinding()]
@@ -178,7 +275,7 @@ Function Sync-GheBranches
 
 		[Parameter(Mandatory=$true, ParameterSetName = "Branches", ValueFromPipeline=$true)]
 		[ValidateNotNullOrEmpty()]
-		[GheBranchCollection] $BranchCollection,
+		[GheBranchCollection] $GheBranchColl,
 
 		[Parameter(Mandatory=$false)]
 		[UInt16] $ExpirationDays = 30,
@@ -190,29 +287,36 @@ Function Sync-GheBranches
 		[ValidateNotNullOrEmpty()]
 		[String] $CsvExportFile
 	)
-	begin
+	Begin
 	{
+		Write-Debug "PsBoundParameters:"
+		$PSBoundParameters.GetEnumerator() | % { Write-Debug $_ }
+    
+		if($PSBoundParameters['Debug']) { $DebugPreference = 'Continue' }
+		Write-Debug "DebugPreference: $DebugPreference"
+
+		Write-Verbose "$($MyInvocation.MyCommand.Name):: Function started"
 	}
-	process
+	Process
 	{
 		if ($PSCmdlet.ParameterSetName -eq "Branches")
-			{ $GheClient = $BranchCollection._client }
+			{ $GheClient = $GheBranchColl._Client }
 		else
 		{
 			if ($PSCmdlet.ParameterSetName -eq "Connect")
 				{ $GheClient = [GheClient]::new($ServerUri, $AdminToken, $SshHostPort, $SshKeyPath)	}
 
-			$BranchCollection = [GheBranchCollection]::new($GheClient, $Organization, $Repository)
+			$GheBranchColl = [GheBranchCollection]::new($GheClient, $Organization, $Repository)
 		}
 
 		# Compare Github branch against given expiration date
 		$ExpirationDate = [System.DateTimeOffset]::Now.AddDays(-$ExpirationDays).DateTime
-		$GheBranchComp = [GheBranchCompare]::new($BranchCollection, $ExpirationDate, $BranchNameMap)
+		$GheBranchComp = [GheBranchCompare]::new($GheBranchColl, $ExpirationDate, $BranchNameMap)
 		if($CsvExportFile)
 			{ $GheBranchComp.ExportToCsv($CsvExportFile) }
 
 		# Create mail base template from GitHub Enterprise configuration
-		$GheConfig = [GheConfig]::new($GheClient, "^smtp\..*$")
+		$GheConfig = [GheConfig]::Get($this._Client, "^smtp|ldap|core\..*$")
 		$MailTemplate =  @{
 			"From" = [System.Net.Mail.MailAddress]::new($GheConfig["smtp.noreply-address"]);
 			"Sender" = [System.Net.Mail.MailAddress]::new($GheConfig["smtp.support-address"]);
@@ -267,24 +371,31 @@ Function Sync-GheBranches
 		$GheCmdsColl = $GheClient.SendMail($GheMailColl)
 
 		# Dump results
-		$output_txt = "Sent messages Dump"
-		Write-Output ("#" * 100)
-		Write-Output $output_txt.PadLeft((100 + $output_txt.Length) / 2, " ")
-		Write-Output ("#" * 100)
-		$GheCmdsColl | ForEach-Object { $_.Query, $_.Response , ("-" * 100)} | Out-String
+		if($PSCmdlet.MyInvocation.BoundParameters["Verbose"])
+		{
+			$output_txt = "Sent messages Dump"
+			Write-Verbose ("#" * 100)
+			Write-Verbose $output_txt.PadLeft((100 + $output_txt.Length) / 2, " ")
+			Write-Verbose ("#" * 100)
+			$GheCmdsColl | ForEach-Object { $_.Query, $_.Response , ("-" * 100)} | Out-String
 
-		$output_txt = "Results For $Organization/$Repository"
-		Write-Output ("#" * 100)
-		Write-Output $output_txt.PadLeft((100 + $output_txt.Length) / 2, " ")
-		Write-Output ("#" * 100)
-		$brch_count = 0
-		ForEach($grp in $GheBranchComp.Values | Group DiffStatus)
-		{ 
-			Write-Output ("[STATUS] {0:N0} {1}" -f $grp.Count, $grp.Name) 
-			$brch_count += $grp.Count
+			$output_txt = "Results For $Organization/$Repository"
+			Write-Verbose ("#" * 100)
+			Write-Verbose $output_txt.PadLeft((100 + $output_txt.Length) / 2, " ")
+			Write-Verbose ("#" * 100)
+			$brch_count = 0
+			ForEach($grp in $GheBranchComp.Values | Group DiffStatus)
+			{
+				Write-Verbose ("[STATUS] {0:N0} {1}" -f $grp.Count, $grp.Name)
+				$brch_count += $grp.Count
+			}
+			Write-Verbose ("[STATUS] {0:N0} Total" -f $brch_count)
+			Write-Verbose ("[STATUS] {0:N0} Evaluated branches" -f $GheBranchColl.Values.Count)
 		}
-		Write-Output ("[STATUS] {0:N0} Total" -f $brch_count)
-		Write-Output ("[STATUS] {0:N0} Evaluated branches" -f $BranchCollection.Values.Count)
+	}
+	End
+	{
+		Write-Verbose "$($MyInvocation.MyCommand.Name):: Function ended"
 	}
 }
 

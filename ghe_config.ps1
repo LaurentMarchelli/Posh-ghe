@@ -2,22 +2,53 @@
 # ghe_config.ps1 : GheConfig Implementation Classes
 # 
 
-class GheConfigCmd : GheCommand
+class GheConfig : System.Collections.Specialized.OrderedDictionary
 {
-	[GheConfig]$Config
-
-	GheConfigCmd([GheConfig]$Config, [String]$Query) : base($Query) 
-		{ $this.Config = $Config }
+	# Intance (GheConfig) Singleton pattern
+	static [GheConfig] Get([GheClient] $GheClient)
+		{ return [GheConfig]::Get($GheClient, $null) }
 	
-	# Virtual callback method used to parse the result
-	[void] SetResponse([System.Object]$Response)
+	static [GheConfig] Get([GheClient] $GheClient, [String] $RegEx)
 	{
-		# Call base class
-		([GheCommand]$this).SetResponse($Response)
+		# Create the configuration cache if it does not exists
+		if($GheClient._Config -eq $null)
+		{
+			$config = [GheConfig]::new($GheClient, $RegEx)
+			# Attach the configuration to the client for subsequent call cache
+			$GheClient | Add-Member NoteProperty -Name _Config -Value $config -Force
+		}
+		return $GheClient._Config
+	}
 
-		# Convert parameters list into parameters dictionary
-		$conf_list = $this.Response.Output
-		$conf_res = $this.Config
+	Hidden [GheCommand] $_Command
+
+	GheConfig([GheClient] $GheClient) : base()
+		{ $this._create($GheClient, $null) }
+
+	GheConfig([GheClient] $GheClient, [String] $RegEx) : base()
+		{ $this._create($GheClient, $RegEx) }
+		
+	hidden [void] _create(
+		[GheClient] $GheClient,
+		[String] $RegEx)
+	{
+		# Create the linux command text
+		if(!$RegEx)
+			{ $CommandText = "ghe-config -l" }
+		else
+			{ $CommandText = "ghe-config --get-regexp '{0}'" -f $RegEx }
+
+		# The tricky way to set the class property without adding a key / value
+		# pair to the [hashtable].
+		$CommandObj = [GheCommand]::new($CommandText)
+		[GheConfig].GetProperty("_Command").SetValue(
+			$this, $CommandObj)
+
+		# Run ssh command to get the result
+		$GheClient.SendCommand($CommandObj)
+
+		# Convert Response parameters list into parameters dictionary
+		$conf_list = $CommandObj.Response.Output
 		$last_key = $null
 		ForEach($conf_obj in $conf_list)
 		{
@@ -25,7 +56,7 @@ class GheConfigCmd : GheCommand
             {
 				"^-----END .*-----$"
 				{ 
-					$conf_res[$last_key] += "`r`n" + $conf_obj
+					$this[$last_key] += "`r`n" + $conf_obj
 					$last_key = $null
 					break
 				}
@@ -36,7 +67,7 @@ class GheConfigCmd : GheCommand
 				"^([^= ]*)[= ](-----BEGIN .*-----)$"
 				{ 
 					$last_key = $matches[1]
-					$conf_res[$last_key] = $matches[2]
+					$this[$last_key] = $matches[2]
 					break
 				}
 				
@@ -44,7 +75,7 @@ class GheConfigCmd : GheCommand
 				{ 
 					if($last_key -eq $null)
 					{ 
-						$conf_res[$matches[1]] = $matches[2] 
+						$this[$matches[1]] = $matches[2] 
 						break
 					}
 				}
@@ -52,39 +83,14 @@ class GheConfigCmd : GheCommand
 				"^.*$"
 				{
 					if($last_key -ne $null)
-						{ $conf_res[$last_key] += "`r`n" + $conf_obj }
+						{ $this[$last_key] += "`r`n" + $conf_obj }
 					else
 						{ Write-Output("[ERROR] : Unable to parse {0}" -f $conf_obj) }
 					break
 				}
 			}
 		}
-	}
-}
 
-class GheConfig : System.Collections.Specialized.OrderedDictionary
-{
-	GheConfig([GheClient]$GheClient) : base()
-		{ $this._create($GheClient, $null) }
 
-	GheConfig([GheClient]$GheClient, [String]$RegEx) : base()
-		{ $this._create($GheClient, $RegEx) }
-		
-	hidden [void] _create(
-		[GheClient]$GheClient,
-		[String]$RegEx)
-	{
-		# Create the linux command text
-		if(!$RegEx)
-			{ $CommandText = "ghe-config -l" }
-		else
-			{ $CommandText = "ghe-config --get-regexp '{0}'" -f $RegEx }
-
-		# Create a Property to save the command (Not a Dictionnary Key !)
-		$CommandObj = [GheConfigCmd]::new($this, $CommandText)
-		$this | Add-Member NoteProperty -Name _Command -Value $CommandObj
-
-		# Run ssh command to get the result
-		$GheClient.SendCommand($CommandObj)
 	}
 }

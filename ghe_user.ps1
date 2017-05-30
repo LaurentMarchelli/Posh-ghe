@@ -15,17 +15,41 @@ class GheUser
 	[String] $login
 	[System.Net.Mail.MailAddress] $email
 	[GheUserStatus] $suspension_status
-	
+
+	# Raw login before normalization
+	[String] $lograw
+
 	# Contructor used to normalize GheUser properties
 	GheUser(
-		[String] $login,
-		[String] $email,
-		[GheUserStatus] $status)
+		[String] $Login,
+		[String] $Email,
+		[GheUserStatus] $Status)
 	{
-		$this.login = $login.Replace(".", "-").Replace("_", "-")
-		if($email)
-			{ $this.email = [System.Net.Mail.MailAddress]::new($email.ToString().ToLower()) }
-		$this.suspension_status = $status
+		$this.SetLogin($Login)
+		$this.SetEmail($Email)
+		$this.suspension_status = $Status
+	}
+
+	# Constructor used to create GheUser from csv import object
+	GheUser([PSObject] $User)
+	{
+		if($User -eq $null)
+			{ $this.suspension_status = [GheUserStatus]::null }
+		else
+		{
+			# Set Specific properties
+			$this.SetLogin($User.login)
+			$this.SetEmail($User.email)
+			if($User.suspension_status)
+				{ $this.suspension_status = [GheUserStatus]($User.suspension_status) }
+			else
+				{ $this.suspension_status = [GheUserStatus]::null }
+
+			# Add non specific properties
+			$exclude =  $this.psobject.properties.ForEach({$_.Name})
+			$User.psobject.properties | Where { $_.Name -notin $exclude } | % {
+				$this | Add-Member -MemberType $_.MemberType -Name $_.Name -Value $_.Value}
+		}
 	}
 
 	# Copy constructors
@@ -42,17 +66,100 @@ class GheUser
 			}
 		}
 	}
+	[void] SetLogin([String] $Login)
+	{
+		$this.login = $Login.Replace(".", "-").Replace("_", "-")
+		$this.lograw = $Login
+	}
+	[void] SetEmail([String] $Email)
+	{
+		if($Email)
+			{ $this.email = [System.Net.Mail.MailAddress]::new($Email.ToString().ToLower()) }
+		else
+			{ $this.email = $null }
+	}
 }
 
 Class GheUserCollection : System.Collections.Hashtable
 {
-	Hidden [GheClient ]$_client
+	# Instance (GheUserCollection) Singleton pattern
+	static [GheUserCollection] Get([GheClient] $GheClient)
+	{
+		# Create the User Collection cache if it does not exists
+		if($GheClient._Users -eq $null)
+		{
+			# Usage: ghe-user-csv [options]
+			#
+			# This utility dumps out a list of all the users in the installation in CSV
+			# format. This information includes login, email address, permission level
+			# (admin or user), how many repositories they have, ssh keys, and the last
+			# logged IP address.
+			#
+			# OPTIONS:
+			#   -h, --help         Show this message
+			#   -d, --header       Display header row. Defaults to false.
+			#   -o, --stdout       Print output to STDOUT. Optional.
+			#   -a, --admins       Limit to admin users. Optional.
+			#   -u, --users        Limit to non-admin users. Optional.
+			#   -s, --suspended    Limit to suspended users. Optional.
+			#
+			# RETURNS a csv user list with following fields :
+			# login, email, role, ssh_keys, org_memberships, repos,
+			# suspension_status, last_logged_ip, creation_date
+			$user_coll = [GheUserCollection]::new($GheClient, [GheCommand]::new("ghe-user-csv -o -d"))
+			$GheClient | Add-Member NoteProperty -Name _Users -Value $user_coll -Force
+		}
+		return $GheClient._Users
+	}
+
+	Hidden [GheClient] $_Client
+	Hidden [HashTable] $_Params
+	Hidden [GheCommandCollection] $_Command
 
 	GheUserCollection([GheClient] $GheClient) : base()
+		{ $this._create($GheClient) }
+
+	GheUserCollection(
+		[GheClient] $GheClient,
+		[GheCommand] $GheCommand) : base()
+	{
+		$this._create($GheClient)
+		$this._Command.Add($GheCommand)
+
+		# Run ssh command to get the result
+		$GheClient.SendCommand($GheCommand)
+
+		# Convert csv result into Object list
+		$this.ConvertFromCsv($GheCommand.Response.Output)
+	}
+
+	GheUserCollection([String] $ImportFilePath) : base()
+	{
+		$this._create($null)
+		$this.ImportFromCsv($ImportFilePath)
+	}
+
+	[void] _create([GheClient] $GheClient)
 	{
 		# The tricky way to set the class property without adding a key / value
 		# pair to the [hashtable].
-		$this.GetType().GetProperty("_client").SetValue($this, $GheClient)
+		[GheUserCollection].GetProperty("_Client").SetValue($this, $GheClient)
+		[GheUserCollection].GetProperty("_Params").SetValue($this, [HashTable]::new())
+		[GheUserCollection].GetProperty("_Command").SetValue($this, [GheCommandCollection]::new())
+	}
+
+	[void] ConvertFromCsv([PSObject[]] $UserRecords)
+	{
+		ConvertFrom-Csv -InputObject $UserRecords | % {
+			$user = [GheUser]::new($_)
+			$this[$user.login] = $user
+		}
+	}
+
+	[void] ImportFromCsv([String] $ImportFilePath)
+	{
+		$fileimport = Get-Content -Path $ImportFilePath -Encoding UTF8
+		$this.ConvertFromCsv($fileimport)
 	}
 
 	[void] ExportToCsv([String] $ExportFilePath)
@@ -76,15 +183,15 @@ Class GheUserCollection : System.Collections.Hashtable
 
 class GheUserDiff : GheUser
 {
-	Hidden [GheUser] $_source
-	Hidden [GheUser] $_target
+	Hidden [GheUser] $_Source
+	Hidden [GheUser] $_Target
 
 	GheUserDiff(
 		[GheUser] $UserSource,
 		[GheUser] $UserTarget) : base($UserSource)
 	{
-		$this._source = $UserSource
-		$this._target = $UserTarget
+		$this._Source = $UserSource
+		$this._Target = $UserTarget
 
 		# Add target specific properties
 		if($UserTarget -eq $null)
@@ -98,53 +205,79 @@ class GheUserDiff : GheUser
 	}
 }
 
+[Flags()] enum GheSyncAction
+{
+	None = 0
+	Enable = 1
+	Disable = 2
+	Create = 4
+	Rename = 8
+}
+
 Class GheUserCompare : GheUserCollection
 {
+	Hidden [GheUserCollection] $_Source
+	Hidden [GheUserCollection] $_Target
+
 	GheUserCompare(
 		[GheUserCollection] $SourceColl,
-		[GheUserCollection] $TargetColl) : base($SourceColl._client)
+		[GheUserCollection] $TargetColl) : base($SourceColl._Client)
 	{
-		# Create compare collection with $SourceColl collection content
-		$SourceColl.Keys | ForEach-Object {
-			$trg_obj = $TargetColl[$_]
-			$this.Add($_, [GheUserDiff]::new($SourceColl[$_], $trg_obj))
-			if($trg_obj)
-				{ $TargetColl.Remove($_) }
+		# The tricky way to set the class property without adding a key / value
+		# pair to the [hashtable].
+		[GheUserCompare].GetProperty("_Source").SetValue($this, $SourceColl)
+		[GheUserCompare].GetProperty("_Target").SetValue($this, $TargetColl)
+
+		# Copy Extended parameters from target
+		$TargetColl._Params.Keys | % {
+			$this._Params[$_] = $TargetColl._Params[$_]
 		}
-		# Update compare collection with object remainnig into $TargetColl
-		$TargetColl.Keys | ForEach-Object {
-			$this.Add($_, [GheUserDiff]::new($null, $TargetColl[$_]))
+		
+		# Create target login hashtable and email hashtable to identify login
+		# modification
+		$TargetLogn = @{}
+		$TargetMail = @{}
+		$TargetColl.Values | % {
+			$TargetLogn[$_.login] = $_
+			if($_.email)
+				{ $TargetMail[$_.email] = $_ }
+		}
+
+		# Create compare collection with $SourceColl collection content
+		$SourceColl.Values | % {
+			# Try to find the user with his login
+			$trg_obj = $TargetLogn[$_.login]
+
+			# If login changed, try to find the user with his email
+			if(($trg_obj -eq $null) -and ($_.email -ne $null))
+				{ $trg_obj = $TargetMail[$_.email] }
+
+			# If the user is found, remove it from target hash tables
+			$this.Add($_.login, [GheUserDiff]::new($_, $trg_obj))
+			if($trg_obj)
+			{
+				$TargetLogn.Remove($trg_obj.login)
+				if($trg_obj.email)
+					{ $TargetMail.Remove($trg_obj.email) }
+			}
+		}
+		# Update compare collection with object remainnig into $TargetLogn
+		$TargetLogn.Values | % {
+			$this.Add($_.login, [GheUserDiff]::new($null, $_))
 		}
 	}
 
-	[HashTable] Analyse([String[]] $IgnoreLogins)
+	[HashTable] Analyze([String[]] $IgnoreLogins)
 	{
-		# Create a group hastable keyed by source suspension_status and target suspension_status
-		$exclude = [System.Collections.ArrayList]::new()
-		if(!$IgnoreLogins)
-			{ $include = $this.Values }
-		else
-		{
-			$include = [System.Collections.ArrayList]::new()
-			$this.Values | % {
-				if($_.login -in  $IgnoreLogins)
-					{ $exclude.Add($_) }
-				else
-					{ $include.Add($_) }
-			}
-		}
-		$grp_lst = $include | Group-Object -AsHashTable -AsString -Property suspension_status, trg_suspension_status
-
-		# Complete the hashtable with values not found in the Values list
-		$empty = @()
-		$lst_stat = [Enum]::GetNames([GheUserStatus]) 
-		$lst_stat| % {
-			$src_obj = $_
-			$lst_stat | % {
-				$key_obj = "{0}, {1}" -f $src_obj, $_
-				if($grp_lst[$key_obj] -eq $null)
-					{ $grp_lst.Add($key_obj, $empty) }
-			}
+		# Create a status and action hashtable
+		$ret_val = @{
+			"Ignored" = [System.Collections.ArrayList]::new();
+			"Enabled" = [System.Collections.ArrayList]::new();
+			"Disabled" = [System.Collections.ArrayList]::new();
+			"ToEnable" = [System.Collections.ArrayList]::new();
+			"ToDisable" = [System.Collections.ArrayList]::new();
+			"ToRename" = [System.Collections.ArrayList]::new();
+			"ToCreate" = [System.Collections.ArrayList]::new();
 		}
 
 		#   "Source, Target"
@@ -158,61 +291,140 @@ Class GheUserCompare : GheUserCollection
 		#   "null, active"         : ToCreate
 		#   "null, suspended"      : ToCreate
 		#   "null, null"           : Unexpected value
-		return @{
-			"Ignored" = $exclude;
-			"Enabled" = $grp_lst["active, active"];
-			"Disabled" = $grp_lst["suspended, null"] + $grp_lst["suspended, suspended"];
-			"ToEnabled" = $grp_lst["suspended, active"];
-			"ToDisable" = $grp_lst["active, null"] + $grp_lst["active, suspended"];
-			"ToCreate" = $grp_lst["null, suspended"] + $grp_lst["null, active"]
+
+		$this.Values | % {
+			if(($IgnoreLogins -ne $null) -and ($_.login -in  $IgnoreLogins))
+				{ $ret_val["Ignored"].Add($_) }
+			elseif($_.login -eq $null)
+				{ $ret_val["ToCreate"].Add($_) }
+			elseif($_.trg_login -eq $null)
+			{
+				if($_.suspension_status -eq [GheUserStatus]::active)
+					{ $ret_val["ToDisable"].Add($_) }
+				else
+					{ $ret_val["Disabled"].Add($_) }
+			}
+			elseif($_.trg_login -ne $_.login)
+				{ $ret_val["ToRename"].Add($_) }
+			elseif($_.trg_suspension_status -eq  $_.suspension_status)
+			{
+				if($_.trg_suspension_status -eq [GheUserStatus]::active)
+					{ $ret_val["Enabled"].Add($_) }
+				else
+					{ $ret_val["Disabled"].Add($_) }
+			}
+			elseif($_.trg_suspension_status -eq [GheUserStatus]::active)
+				{ $ret_val["ToEnable"].Add($_) }
+			else
+				{ $ret_val["ToDisable"].Add($_) }
 		}
+		return $ret_val
 	}
 
 	# Synchronize in the GitHub Server, the source collection with target collection
 	# information
 	[HashTable] Synch(
 		[HashTable] $Analysis,
-		[Boolean] $CreateNewUser)
+		[GheSyncAction] $SyncAction)
 	{
 		$synch_err = @{
 			"Enable" = [System.Collections.ArrayList]::new();
 			"Disable" = [System.Collections.ArrayList]::new();
+			"Rename" = [System.Collections.ArrayList]::new();
+			"RenameStatus" = [System.Collections.ArrayList]::new();
 			"Create" = [System.Collections.ArrayList]::new();
-			"SuspendNew" = [System.Collections.ArrayList]::new();
+			"CreateStatus" = [System.Collections.ArrayList]::new();
 		}
-		$user_admin = [Octokit.UserAdministrationClient]::new($this._client.ApiConnection)
-		$Analysis["ToEnabled"] | % {
-			if($user_admin.Unsuspend($_.login).Result)
-				{ $_.suspension_status = $_._source.suspension_status = [GheUserStatus]::active }
-			else
-				{ $synch_err["Enable"].Add($_) }
+		$user_admin = [Octokit.UserAdministrationClient]::new($this._Client.ApiConnection)
+		if($SyncAction -band [GheSyncAction]::Enable)
+		{
+			$Analysis["ToEnable"] | % {
+				if($user_admin.Unsuspend($_.login).Result)
+					{ $_.suspension_status = $_._Source.suspension_status = [GheUserStatus]::active }
+				else
+					{ $synch_err["Enable"].Add($_) }
+			}
 		}
-		$Analysis["ToDisable"] | % {
-			if($user_admin.Suspend($_.login).Result)
-				{ $_.suspension_status = $_._source.suspension_status = [GheUserStatus]::suspended }
-			else
-				{ $synch_err["Disable"].Add($_) }
+		if($SyncAction -band [GheSyncAction]::Disable)
+		{
+			$Analysis["ToDisable"] | % {
+				if($user_admin.Suspend($_.login).Result)
+					{ $_.suspension_status = $_._Source.suspension_status = [GheUserStatus]::suspended }
+				else
+					{ $synch_err["Disable"].Add($_) }
+			}
 		}
-		if(!$CreateNewUser)
-			{ return $synch_err }
+		if($SyncAction -band [GheSyncAction]::Rename)
+		{
+			$config = [GheConfig]::Get($this._Client, "^smtp|ldap|core\..*$")
+			$prof_logn = $config["ldap.profile.uid"]
+			$prof_name = $config["ldap.profile.name"]
+			$mail_lst = [System.Collections.Generic.List[System.Net.Mail.MailMessage]]::new()
 
-		$Analysis["ToCreate"] | % {
-			if($user_admin.Create([Octokit.NewUser]::new($_.trg_login, $_.trg_email)).Result)
-			{
-				$_.login = $_.trg_login
-				$_.email = $_.trg_email
-				$_.suspension_status = [GheUserStatus]::active
-				$_._source = [GheUser]::($_)
+			$Analysis["ToRename"] | %  {
+				# Synchronize the status first to avoid error due to server delay when renaming.
+				if($_.trg_suspension_status -ne $_.suspension_status)
+				{
+					if(($_.trg_suspension_status -eq [GheUserStatus]::active) -and
+						($user_admin.Unsuspend($_.login).Result))
+						{ $_.suspension_status = $_._Source.suspension_status = [GheUserStatus]::active }
+					elseif(($_.trg_suspension_status -eq [GheUserStatus]::suspended) -and
+						($user_admin.Suspend($_.login).Result))
+						{ $_.suspension_status = $_._Source.suspension_status = [GheUserStatus]::suspended }
+					else
+						{ $synch_err["RenameStatus"].Add($_) }
+				}
+				# Now try to rename the user
+				if($user_admin.Rename($_.login, [Octokit.UserRename]::new($_.trg_login)).Result)
+				{
+					# Prepare Notification email
+					$mail_tmpl = $this._Params["Mail.Rename"]
+					if($mail_tmpl)
+					{
+						[GheMailMsg] $mail_obj = $mail_tmpl
+						$mail_obj.To.Add($_.email)
+						$mail_obj.Body = ($mail_obj.Body -f
+							$_.login, $_.lograw,
+							$_.trg_login, $_.trg_lograw)
+						$mail_lst.Add($mail_obj)
+					}
+					$_.login = $_._Source.login = $_.trg_login
+				}
+				else
+				{
+					# Keep the worse error only, to have correct statistics.
+					$synch_err["RenameStatus"].Remove($_)
+					$synch_err["Rename"].Add($_)
+				}
+			}
+			# Send Notification Emails and store result into hidden member
+			[GheUserCompare].GetProperty("_Command").SetValue(
+				$this, $this._Client.SendMail($mail_lst))
+		}
+		if($SyncAction -band [GheSyncAction]::Create)
+		{
+			$synch_ok = [System.Collections.ArrayList]::new();
+			$Analysis["ToCreate"] | % {
+				if($user_admin.Create([Octokit.NewUser]::new($_.trg_login, $_.trg_email)).Result)
+				{
+					$_.login = $_.trg_login
+					$_.email = $_.trg_email
+					$_.suspension_status = [GheUserStatus]::active
+					$_._Source = [GheUser]::($_)
+					$synch_ok.Add($_)
+				}
+				else
+					{ $synch_err["Create"].Add($_) }
+			}
+			$synch_ok | % {
 				if($_.trg_suspension_status -eq [GheUserStatus]::suspended)
 				{
 					if($user_admin.Suspend($_.login).Result)
-						{ $_.suspension_status = $_._source.suspension_status = [GheUserStatus]::suspended }
+						{ $_.suspension_status = $_._Source.suspension_status = [GheUserStatus]::suspended }
 					else
-						{ $synch_err["SuspendNew"].Add($_) }
+						{ $synch_err["CreateStatus"].Add($_) }
 				}
 			}
-			else
-				{ $synch_err["Create"].Add($_) }
 		}
 		return $synch_err
 	}

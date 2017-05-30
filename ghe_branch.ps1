@@ -29,8 +29,8 @@ class GheBranch
 
 class GheBranchCollection
 {
-	Hidden [GheClient]$_client
-	Hidden [GheGHubUserCollection]$_users
+	Hidden [GheClient] $_Client
+	Hidden [GheUserCollection] $_Users
 	[Octokit.RepositoriesClient] $RepoClient
 	[Octokit.Repository] $RepoObject
 	[System.Collections.ArrayList] $Values
@@ -41,7 +41,7 @@ class GheBranchCollection
 		[String] $OrgaName,
 		[String] $RepoName) : base()
 	{
-		$this._client = $GheClient
+		$this._Client = $GheClient
 		$this.RepoClient = [Octokit.RepositoriesClient]::new($GheClient.ApiConnection)
 		$this.RepoObject = $this.RepoClient.Get($OrgaName, $RepoName).Result
 		$this.Values = [System.Collections.ArrayList]::new()
@@ -69,8 +69,8 @@ class GheBranchCollection
 	GheBranchCollection(
 		[GheBranchCollection] $BranchColl) : base()
 	{ 
-		$this._client = $BranchColl._client
-		$this._users = $BranchColl._users
+		$this._Client = $BranchColl._Client
+		$this._Users = $BranchColl._Users
 		$this.RepoClient = $BranchColl.RepoClient
 		$this.RepoObject = $BranchColl.RepoObject
 		$this.Values = [System.Collections.ArrayList]::new()
@@ -154,7 +154,7 @@ class GheBranchCompare : GheBranchCollection
 		[System.Object[]] $BranchNameMap
 		) : base($SourceColl)
 	{
-		# Analyse the branch Collection
+		# Analyze the branch Collection
 		[Octokit.RepositoryCommitsClient] $cmit_clt = $this.RepoClient.Commit
 		ForEach($brch_obj in $SourceColl.Values)
 		{
@@ -275,8 +275,8 @@ class GheBranchCompare : GheBranchCollection
 		[Hashtable] $MailContent)
 	{
 		# Get the user collection if it does not already exist
-		if(!$this._users)
-			{ $this._users = [GheGHubUserCollection]::new($this._client) }
+		if(!$this._Users)
+			{ $this._Users = [GheUserCollection]::Get($this._Client) }
 
 		# Create message for all concerned and identified users
 		$mail_coll = [GheMailMsgCollection]::new()
@@ -286,7 +286,7 @@ class GheBranchCompare : GheBranchCollection
 		{
 			# If the CommitterLogin cannot be found in the GitHub Users, or if the user is disabled
 			# store branches into Administrator mail pool
-			$usr_obj = $this._users[$grp_usr.Name]
+			$usr_obj = $this._Users[$grp_usr.Name]
 			if(($usr_obj -eq $null) -or
 				($usr_obj.suspension_status -ne [GheUserStatus]::active))
 			{
@@ -306,7 +306,7 @@ class GheBranchCompare : GheBranchCollection
 		$mail_obj = $this.CreateMailMsg($MailAdmin, $MailContent, $brch_pool.Values)
 		if($mail_obj)
 		{
-			$this._users.Values | where-object {
+			$this._Users.Values | where-object {
 				($_.role -eq "admin") -and
 				($_.suspension_status -eq [GheUserStatus]::active)
 			} | ForEach-Object {$mail_obj.To.Add($_.email)}
